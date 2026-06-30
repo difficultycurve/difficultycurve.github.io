@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260630-02';
+const DATA_VERSION = '20260630-03';
 
 const state = {
   seeds: {},
@@ -7,7 +7,7 @@ const state = {
   result: null,
   chartVisibility: { growth: true, final: true },
   trendVisibility: { growth: true, avg10: true, avg20: true, avg50: true, avg100: true },
-  buffVisibility: { buff0: true, buff1: true, buff2: true, buff3: true, buff4: true, buff5: true },
+  buffVisibility: { buff1: true, buff2: true, buff3: true, buff4: true, buff5: true },
 };
 
 const els = {};
@@ -234,6 +234,7 @@ function computeModel(config) {
       const buffCounts = [1, 0, 0, 0, 0, 0];
       theoreticalRows.push({ fail0, buffCounts });
       row.theoreticalBuffDistribution = [1, 0, 0, 0, 0, 0];
+      row.theoreticalFirstBuffDistribution = [0, 0, 0, 0, 0];
       return;
     }
 
@@ -261,6 +262,11 @@ function computeModel(config) {
     row.theoreticalBuffDistribution = total > 0
       ? buffCounts.map((value) => Math.max(0, value) / total)
       : [1, 0, 0, 0, 0, 0];
+    const firstBuffCounts = buffCounts.slice(1);
+    const firstBuffTotal = firstBuffCounts.reduce((sum, value) => sum + Math.max(0, value), 0);
+    row.theoreticalFirstBuffDistribution = firstBuffTotal > 0
+      ? firstBuffCounts.map((value) => Math.max(0, value) / firstBuffTotal)
+      : [0, 0, 0, 0, 0];
   });
 
   return { rows, avg10, avg20, avg50, avg100 };
@@ -277,7 +283,7 @@ function initEls() {
     'coinLevels','buffGrid','halfStepThreshold','integerThreshold','projectTitle','heroStats',
     'focusStart','focusEnd','focusTable','overrideTable','curveCanvas','trendCanvas','protocolWarning',
     'runtimeWarning','runtimeWarningText','showGrowth','showFinal','showTrendGrowth','showAvg10','showAvg20','showAvg50','showAvg100',
-    'showBuff0','showBuff1','showBuff2','showBuff3','showBuff4','showBuff5','buffDistributionCanvas','exportBuffDistributionBtn','exportFocusBtn','cycleAverageValue'
+    'showBuff1','showBuff2','showBuff3','showBuff4','showBuff5','buffDistributionCanvas','exportBuffDistributionBtn','exportFocusBtn','cycleAverageValue'
   ].forEach((id) => { els[id] = $(id); });
 }
 
@@ -478,6 +484,10 @@ function focusRowsData() {
   return state.result.rows.slice(range.start - 1, range.end);
 }
 
+function formatPercent(value) {
+  return Number.isFinite(value) ? `${(value * 100).toFixed(2)}%` : '-';
+}
+
 function renderFocusTable() {
   const rows = focusRowsData();
   els.focusTable.innerHTML = rows.map((row) => `
@@ -491,6 +501,12 @@ function renderFocusTable() {
       <td>${row.avg20.toFixed(2)}</td>
       <td>${row.avg50.toFixed(2)}</td>
       <td>${row.avg100.toFixed(2)}</td>
+      <td>${formatPercent(row.theoreticalBuffDistribution?.[0])}</td>
+      <td>${formatPercent(row.theoreticalFirstBuffDistribution?.[0])}</td>
+      <td>${formatPercent(row.theoreticalFirstBuffDistribution?.[1])}</td>
+      <td>${formatPercent(row.theoreticalFirstBuffDistribution?.[2])}</td>
+      <td>${formatPercent(row.theoreticalFirstBuffDistribution?.[3])}</td>
+      <td>${formatPercent(row.theoreticalFirstBuffDistribution?.[4])}</td>
     </tr>
   `).join('');
 }
@@ -502,9 +518,9 @@ function drawBuffDistributionBars(canvas, rows) {
   const width = canvas.width;
   const height = canvas.height;
   const padding = { top: 20, right: 22, bottom: 46, left: 48 };
-  const colors = ['#15a8d8', '#8fcf00', '#f04d44', '#ffd64d', '#9a45a0', '#55b878'];
-  const names = ['0\u7ea7buff', '1\u7ea7buff', '2\u7ea7buff', '3\u7ea7buff', '4\u7ea7buff', '5\u7ea7buff'];
-  const visible = names.map((_, idx) => state.buffVisibility[`buff${idx}`] !== false);
+  const colors = ['#8fcf00', '#f04d44', '#ffd64d', '#9a45a0', '#55b878'];
+  const names = ['\u9996\u95ef1\u7ea7buff\u6bd4\u4f8b', '\u9996\u95ef2\u7ea7buff\u6bd4\u4f8b', '\u9996\u95ef3\u7ea7buff\u6bd4\u4f8b', '\u9996\u95ef4\u7ea7buff\u6bd4\u4f8b', '\u9996\u95ef5\u7ea7buff\u6bd4\u4f8b'];
+  const visible = names.map((_, idx) => state.buffVisibility[`buff${idx + 1}`] !== false);
   hideChartTooltip();
   ctx.clearRect(0, 0, width, height);
   canvas.__chartMeta = null;
@@ -536,7 +552,7 @@ function drawBuffDistributionBars(canvas, rows) {
   }
 
   rows.forEach((row, index) => {
-    const distribution = row.theoreticalBuffDistribution || [1, 0, 0, 0, 0, 0];
+    const distribution = row.theoreticalFirstBuffDistribution || [0, 0, 0, 0, 0];
     let stackTop = 0;
     const x = padding.left + (index / pointCount) * usableW + gap / 2;
     distribution.forEach((value, buffIndex) => {
@@ -715,7 +731,7 @@ function setupChartTooltip(canvas) {
 
     const rows = meta.type === 'stackedPercent'
       ? visibleEntries
-        .map((entry, buffIndex) => ({ entry, value: meta.rows[index]?.theoreticalBuffDistribution?.[buffIndex] * 100 }))
+        .map((entry, buffIndex) => ({ entry, value: meta.rows[index]?.theoreticalFirstBuffDistribution?.[buffIndex] * 100 }))
         .filter((item) => item.entry.visible !== false && Number.isFinite(item.value))
       : visibleEntries
         .map((entry) => ({ entry, value: entry.data[index] }))
@@ -768,7 +784,7 @@ function renderTrendChart() {
 }
 
 function syncLegendState() {
-  ['showGrowth', 'showFinal', 'showTrendGrowth', 'showAvg10', 'showAvg20', 'showAvg50', 'showAvg100', 'showBuff0', 'showBuff1', 'showBuff2', 'showBuff3', 'showBuff4', 'showBuff5'].forEach((id) => {
+  ['showGrowth', 'showFinal', 'showTrendGrowth', 'showAvg10', 'showAvg20', 'showAvg50', 'showAvg100', 'showBuff1', 'showBuff2', 'showBuff3', 'showBuff4', 'showBuff5'].forEach((id) => {
     const input = els[id];
     if (!input) return;
     input.closest('.legend-toggle')?.classList.toggle('off', !input.checked);
@@ -816,7 +832,7 @@ function exportBuffDistributionData() {
   const rows = focusRowsData();
   const header = ['\u5173\u5361', '0\u7ea7buff\u5360\u6bd4', '1\u7ea7buff\u5360\u6bd4', '2\u7ea7buff\u5360\u6bd4', '3\u7ea7buff\u5360\u6bd4', '4\u7ea7buff\u5360\u6bd4', '5\u7ea7buff\u5360\u6bd4'];
   const lines = [header.join(',')].concat(rows.map((row) => {
-    const distribution = row.theoreticalBuffDistribution || [1, 0, 0, 0, 0, 0];
+    const distribution = row.theoreticalFirstBuffDistribution || [0, 0, 0, 0, 0];
     return [
       row.levelId,
       ...distribution.map((value) => (Math.max(0, value) * 100).toFixed(2) + '%'),
@@ -845,6 +861,12 @@ function exportFocusTable() {
     row.avg20.toFixed(2),
     row.avg50.toFixed(2),
     row.avg100.toFixed(2),
+    formatPercent(row.theoreticalBuffDistribution?.[0]),
+    formatPercent(row.theoreticalFirstBuffDistribution?.[0]),
+    formatPercent(row.theoreticalFirstBuffDistribution?.[1]),
+    formatPercent(row.theoreticalFirstBuffDistribution?.[2]),
+    formatPercent(row.theoreticalFirstBuffDistribution?.[3]),
+    formatPercent(row.theoreticalFirstBuffDistribution?.[4]),
   ].join(',')));
   const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -914,7 +936,6 @@ function bindBaseInputs() {
   });
 
   [
-    ['showBuff0', 'buff0'],
     ['showBuff1', 'buff1'],
     ['showBuff2', 'buff2'],
     ['showBuff3', 'buff3'],

@@ -488,7 +488,7 @@ canvas {
 
 table {
   width: 100%;
-  min-width: 900px;
+  min-width: 1500px;
   table-layout: fixed;
   border-collapse: collapse;
   font-size: 13px;
