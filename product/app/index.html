@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>难度曲线动态计算器</title>
-  <link rel="stylesheet" href="./styles.css?v=20260626-15" />
+  <link rel="stylesheet" href="./styles.css?v=20260630-01" />
 </head>
 <body>
   <div class="app-shell">
@@ -182,6 +182,25 @@
         </div>
       </section>
 
+
+      <section class="panel">
+        <div class="section-head">
+          <h2>&#29702;&#35770;buff&#20998;&#24067;</h2>
+          <div class="legend compact-legend buff-legend" id="buffDistributionLegend">
+            <label class="legend-toggle"><input id="showBuff0" type="checkbox" checked /><span class="swatch buff0"></span><span>0级buff</span></label>
+            <label class="legend-toggle"><input id="showBuff1" type="checkbox" checked /><span class="swatch buff1"></span><span>1级buff</span></label>
+            <label class="legend-toggle"><input id="showBuff2" type="checkbox" checked /><span class="swatch buff2"></span><span>2级buff</span></label>
+            <label class="legend-toggle"><input id="showBuff3" type="checkbox" checked /><span class="swatch buff3"></span><span>3级buff</span></label>
+            <label class="legend-toggle"><input id="showBuff4" type="checkbox" checked /><span class="swatch buff4"></span><span>4级buff</span></label>
+            <label class="legend-toggle"><input id="showBuff5" type="checkbox" checked /><span class="swatch buff5"></span><span>5级buff</span></label>
+          </div>
+        </div>
+        <p class="muted section-help">这里按“理论连胜buff分布计算”的递推方式，展示当前详细数据关卡段内每一关首闯时处于各 buff 状态的人数占比。</p>
+        <div class="chart-wrap">
+          <canvas id="buffDistributionCanvas" width="1200" height="360"></canvas>
+        </div>
+      </section>
+
       <section class="panel">
         <div class="section-head">
           <h2>趋势-近x关均难度</h2>
@@ -217,6 +236,6 @@
     </main>
   </div>
 
-  <script src="./app.js?v=20260626-15"></script>
+  <script src="./app.js?v=20260630-01"></script>
 </body>
 </html>

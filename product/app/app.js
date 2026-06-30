@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260626-15';
+const DATA_VERSION = '20260630-01';
 
 const state = {
   seeds: {},
@@ -7,6 +7,7 @@ const state = {
   result: null,
   chartVisibility: { growth: true, final: true },
   trendVisibility: { growth: true, avg10: true, avg20: true, avg50: true, avg100: true },
+  buffVisibility: { buff0: true, buff1: true, buff2: true, buff3: true, buff4: true, buff5: true },
 };
 
 const els = {};
@@ -143,6 +144,11 @@ function buildManualOverrideMap(overrides) {
   return map;
 }
 
+function passProbability(difficulty, coeff, itemUseRate = 0) {
+  const raw = 1 / Math.max(0.001, ((Math.max(1, difficulty) - 1) * coeff) + 1);
+  return Math.min(1, Math.max(0, raw + itemUseRate - itemUseRate * raw));
+}
+
 function computeModel(config) {
   const levelCount = Math.max(1, Math.round(num(config.levelCount, 300)));
   const guideSet = levelSet(config.specialRules.guideLevels || []);
@@ -213,6 +219,8 @@ function computeModel(config) {
   const avg100 = rollingAverage(finalSeries, 100);
   const fullBuffBaseShare = Math.min(1, Math.max(0, num(config.buffModel.fullBuffBaseShare, 0.1)));
   const fullBuffProbability = rows.map((row, idx) => Math.min(1, fullBuffBaseShare + Math.max(0, row.buffed - 1) / 10 + idx / Math.max(200, rows.length * 2)));
+  const itemUseRate = Math.min(1, Math.max(0, num(config.buffModel.fullBuffItemUseRate, 0)));
+  const theoreticalRows = [];
 
   rows.forEach((row, idx) => {
     row.avg10 = avg10[idx];
@@ -220,6 +228,39 @@ function computeModel(config) {
     row.avg50 = avg50[idx];
     row.avg100 = avg100[idx];
     row.fullBuffProbability = fullBuffProbability[idx];
+
+    if (idx < 30) {
+      const fail0 = idx === 29 ? 1 : 0;
+      const buffCounts = [1, 0, 0, 0, 0, 0];
+      theoreticalRows.push({ fail0, buffCounts });
+      row.theoreticalBuffDistribution = [1, 0, 0, 0, 0, 0];
+      return;
+    }
+
+    const prev = theoreticalRows[idx - 1] || { fail0: 1, buffCounts: [1, 0, 0, 0, 0, 0] };
+    const prevDifficulty = rows[idx - 1]?.adjusted ?? row.adjusted;
+    const currentDifficulty = row.adjusted;
+    const prevPass = decay.map((coeff, buffIndex) => passProbability(prevDifficulty, coeff, buffIndex === 5 ? itemUseRate : 0));
+    const currentPass = decay.map((coeff, buffIndex) => passProbability(currentDifficulty, coeff, buffIndex === 5 ? itemUseRate : 0));
+    const buffCounts = [
+      0,
+      prev.fail0,
+      prev.buffCounts[1] * prevPass[1],
+      prev.buffCounts[2] * prevPass[2],
+      prev.buffCounts[3] * prevPass[3],
+      (prev.buffCounts[4] * prevPass[4]) + (prev.buffCounts[5] * prevPass[5]),
+    ];
+    const fail0 = buffCounts[1] * (1 - currentPass[1])
+      + buffCounts[2] * (1 - currentPass[2])
+      + buffCounts[3] * (1 - currentPass[3])
+      + buffCounts[4] * (1 - currentPass[4])
+      + buffCounts[5] * (1 - currentPass[5]);
+    buffCounts[0] = fail0 * currentDifficulty;
+    const total = buffCounts.reduce((sum, value) => sum + Math.max(0, value), 0);
+    theoreticalRows.push({ fail0, buffCounts });
+    row.theoreticalBuffDistribution = total > 0
+      ? buffCounts.map((value) => Math.max(0, value) / total)
+      : [1, 0, 0, 0, 0, 0];
   });
 
   return { rows, avg10, avg20, avg50, avg100 };
@@ -235,7 +276,8 @@ function initEls() {
     'guideDifficulty','coinDifficulty','tailCapMax','tailCapWindow','tailCapEnabled','streakEnabled','streakExtraDefault','guideLevels',
     'coinLevels','buffGrid','halfStepThreshold','integerThreshold','projectTitle','heroStats',
     'focusStart','focusEnd','focusTable','overrideTable','curveCanvas','trendCanvas','protocolWarning',
-    'runtimeWarning','runtimeWarningText','showGrowth','showFinal','showTrendGrowth','showAvg10','showAvg20','showAvg50','showAvg100','exportFocusBtn','cycleAverageValue'
+    'runtimeWarning','runtimeWarningText','showGrowth','showFinal','showTrendGrowth','showAvg10','showAvg20','showAvg50','showAvg100',
+    'showBuff0','showBuff1','showBuff2','showBuff3','showBuff4','showBuff5','buffDistributionCanvas','exportFocusBtn','cycleAverageValue'
   ].forEach((id) => { els[id] = $(id); });
 }
 
@@ -453,6 +495,88 @@ function renderFocusTable() {
   `).join('');
 }
 
+
+function drawBuffDistributionBars(canvas, rows) {
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+  const padding = { top: 20, right: 22, bottom: 46, left: 48 };
+  const colors = ['#15a8d8', '#8fcf00', '#f04d44', '#ffd64d', '#9a45a0', '#55b878'];
+  const names = ['0?buff', '1?buff', '2?buff', '3?buff', '4?buff', '5?buff'];
+  const visible = names.map((_, idx) => state.buffVisibility[`buff${idx}`] !== false);
+  hideChartTooltip();
+  ctx.clearRect(0, 0, width, height);
+  canvas.__chartMeta = null;
+  window.__chartMetaById = window.__chartMetaById || {};
+  window.__chartMetaById[canvas.id] = null;
+  if (!rows.length || !visible.some(Boolean)) return;
+
+  const usableW = width - padding.left - padding.right;
+  const usableH = height - padding.top - padding.bottom;
+  const pointCount = rows.length;
+  const gap = pointCount > 80 ? 1 : 2;
+  const barW = Math.max(1, (usableW / pointCount) - gap);
+  const y = (value) => padding.top + usableH - value * usableH;
+
+  ctx.strokeStyle = '#d7e0e8';
+  ctx.lineWidth = 1;
+  ctx.fillStyle = '#66788a';
+  ctx.font = '12px Arial';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i <= 5; i += 1) {
+    const value = i / 5;
+    const py = y(value);
+    ctx.beginPath();
+    ctx.moveTo(padding.left, py);
+    ctx.lineTo(width - padding.right, py);
+    ctx.stroke();
+    ctx.fillText(`${Math.round(value * 100)}%`, padding.left - 8, py);
+  }
+
+  rows.forEach((row, index) => {
+    const distribution = row.theoreticalBuffDistribution || [1, 0, 0, 0, 0, 0];
+    let stackTop = 0;
+    const x = padding.left + (index / pointCount) * usableW + gap / 2;
+    distribution.forEach((value, buffIndex) => {
+      if (!visible[buffIndex]) return;
+      const share = Math.max(0, value);
+      const yTop = y(stackTop + share);
+      const yBottom = y(stackTop);
+      ctx.fillStyle = colors[buffIndex];
+      ctx.fillRect(x, yTop, barW, Math.max(1, yBottom - yTop));
+      stackTop += share;
+    });
+  });
+
+  const levelIds = rows.map((row) => row.levelId);
+  const desiredTicks = Math.min(14, Math.max(2, Math.floor(usableW / 72)));
+  const tickEvery = Math.max(1, Math.ceil(pointCount / desiredTicks));
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = '#66788a';
+  for (let index = 0; index < pointCount; index += tickEvery) {
+    const px = padding.left + (index / Math.max(1, pointCount - 1)) * usableW;
+    ctx.strokeStyle = '#edf2f6';
+    ctx.beginPath();
+    ctx.moveTo(px, padding.top);
+    ctx.lineTo(px, height - padding.bottom);
+    ctx.stroke();
+    ctx.fillStyle = '#66788a';
+    ctx.fillText(String(levelIds[index]), px, height - padding.bottom + 12);
+  }
+  if ((pointCount - 1) % tickEvery !== 0) {
+    const px = width - padding.right;
+    ctx.fillText(String(levelIds[pointCount - 1]), px, height - padding.bottom + 12);
+  }
+
+  const visibleEntries = names.map((name, idx) => ({ name, color: colors[idx], visible: visible[idx], decimals: 1 }));
+  const meta = { type: 'stackedPercent', padding, pointCount, levelIds, rows, visibleEntries };
+  canvas.__chartMeta = meta;
+  window.__chartMetaById[canvas.id] = meta;
+}
+
 function drawLines(canvas, seriesEntries, options = {}) {
   const ctx = canvas.getContext('2d');
   const width = canvas.width;
@@ -577,7 +701,7 @@ function setupChartTooltip(canvas) {
     const scaleY = canvas.height / rect.height;
     const px = (event.clientX - rect.left) * scaleX;
     const py = (event.clientY - rect.top) * scaleY;
-    const { padding, min, max, pointCount, levelIds, visibleEntries } = meta;
+    const { padding, pointCount, levelIds, visibleEntries } = meta;
     const usableW = canvas.width - padding.left - padding.right;
     const usableH = canvas.height - padding.top - padding.bottom;
     const inPlot = px >= padding.left && px <= canvas.width - padding.right && py >= padding.top && py <= canvas.height - padding.bottom;
@@ -589,9 +713,13 @@ function setupChartTooltip(canvas) {
     const rawIndex = ((px - padding.left) / Math.max(1, usableW)) * Math.max(1, pointCount - 1);
     const index = Math.min(pointCount - 1, Math.max(0, Math.round(rawIndex)));
 
-    const rows = visibleEntries
-      .map((entry) => ({ entry, value: entry.data[index] }))
-      .filter((item) => Number.isFinite(item.value));
+    const rows = meta.type === 'stackedPercent'
+      ? visibleEntries
+        .map((entry, buffIndex) => ({ entry, value: meta.rows[index]?.theoreticalBuffDistribution?.[buffIndex] * 100 }))
+        .filter((item) => item.entry.visible !== false && Number.isFinite(item.value))
+      : visibleEntries
+        .map((entry) => ({ entry, value: entry.data[index] }))
+        .filter((item) => Number.isFinite(item.value));
 
     if (!rows.length) {
       hideChartTooltip();
@@ -621,6 +749,11 @@ function renderChart() {
   drawLines(els.curveCanvas, seriesEntries, { levelIds: rows.map((r) => r.levelId) });
 }
 
+function renderBuffDistributionChart() {
+  const rows = focusRowsData();
+  drawBuffDistributionBars(els.buffDistributionCanvas, rows);
+}
+
 function renderTrendChart() {
   const rows = focusRowsData();
   if (!rows.length) return;
@@ -635,7 +768,7 @@ function renderTrendChart() {
 }
 
 function syncLegendState() {
-  ['showGrowth', 'showFinal', 'showTrendGrowth', 'showAvg10', 'showAvg20', 'showAvg50', 'showAvg100'].forEach((id) => {
+  ['showGrowth', 'showFinal', 'showTrendGrowth', 'showAvg10', 'showAvg20', 'showAvg50', 'showAvg100', 'showBuff0', 'showBuff1', 'showBuff2', 'showBuff3', 'showBuff4', 'showBuff5'].forEach((id) => {
     const input = els[id];
     if (!input) return;
     input.closest('.legend-toggle')?.classList.toggle('off', !input.checked);
@@ -661,6 +794,7 @@ function recompute() {
     renderHero();
     renderFocusTable();
     renderChart();
+    renderBuffDistributionChart();
     renderTrendChart();
     syncLegendState();
     syncSpecialRuleControls();
@@ -759,6 +893,22 @@ function bindBaseInputs() {
   });
 
   [
+    ['showBuff0', 'buff0'],
+    ['showBuff1', 'buff1'],
+    ['showBuff2', 'buff2'],
+    ['showBuff3', 'buff3'],
+    ['showBuff4', 'buff4'],
+    ['showBuff5', 'buff5'],
+  ].forEach(([id, key]) => {
+    if (!els[id]) return;
+    els[id].addEventListener('change', () => {
+      state.buffVisibility[key] = els[id].checked;
+      syncLegendState();
+      renderBuffDistributionChart();
+    });
+  });
+
+  [
     ['showTrendGrowth', 'growth'],
     ['showAvg10', 'avg10'],
     ['showAvg20', 'avg20'],
@@ -844,6 +994,7 @@ async function init() {
   configToForm();
   bindBaseInputs();
   setupChartTooltip(els.curveCanvas);
+  setupChartTooltip(els.buffDistributionCanvas);
   setupChartTooltip(els.trendCanvas);
   window.addEventListener('scroll', hideChartTooltip, true);
   window.addEventListener('blur', hideChartTooltip);

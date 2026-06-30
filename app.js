@@ -1,15 +1,17 @@
-﻿const DATA_VERSION = '20260625-24';
+const DATA_VERSION = '20260630-01';
 
 const state = {
   seeds: {},
   currentKey: 'reference',
   config: null,
   result: null,
-  chartVisibility: { growth: true, cycle: true, buffed: true, final: true },
-  trendVisibility: { avg10: true, avg20: true, avg50: true, avg100: true },
+  chartVisibility: { growth: true, final: true },
+  trendVisibility: { growth: true, avg10: true, avg20: true, avg50: true, avg100: true },
+  buffVisibility: { buff0: true, buff1: true, buff2: true, buff3: true, buff4: true, buff5: true },
 };
 
 const els = {};
+const SAVED_CONFIG_PREFIX = 'difficultyCurve.savedConfig.';
 
 async function loadJson(path) {
   const separator = path.includes('?') ? '&' : '?';
@@ -55,14 +57,41 @@ function safeExpressionToJs(expr) {
     .replace(/\^/g, '**');
 }
 
-function evaluateGrowthFormula(formula, x) {
-  const jsExpr = safeExpressionToJs(formula);
-  const fn = new Function('x', `return ${jsExpr};`);
-  const result = fn(x);
-  if (!Number.isFinite(result)) throw new Error(`基础增长公式结果无效。请检查公式写法，当前关卡：${x}`);
-  return result;
+function splitGrowthFormula(formula) {
+  const text = String(formula ?? '').trim();
+  if (!text) return { numerator: '', denominator: '1' };
+  let depth = 0;
+  let slashIndex = -1;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch === '(') depth += 1;
+    else if (ch === ')' && depth > 0) depth -= 1;
+    else if (ch === '/' && depth === 0) slashIndex = i;
+  }
+  if (slashIndex < 0) return { numerator: text, denominator: '1' };
+  return {
+    numerator: text.slice(0, slashIndex).trim(),
+    denominator: text.slice(slashIndex + 1).trim() || '1',
+  };
 }
 
+function buildGrowthFormula(growth) {
+  if (!growth) return '';
+  if (growth.formulaNumerator !== undefined || growth.formulaDenominator !== undefined) {
+    const numerator = String(growth.formulaNumerator ?? '').trim();
+    const denominator = String(growth.formulaDenominator ?? '').trim() || '1';
+    return numerator + ' / ' + denominator;
+  }
+  return String(growth.formula || '').trim();
+}
+
+function evaluateGrowthFormula(formula, x) {
+  const jsExpr = safeExpressionToJs(formula);
+  const fn = new Function('x', 'return ' + jsExpr + ';');
+  const result = fn(x);
+  if (!Number.isFinite(result)) throw new Error('基础增长公式结果无效。请检查公式写法，当前关卡：' + x);
+  return result;
+}
 function getCycleFactor(levelId, cycle) {
   const length = Math.max(1, Math.round(cycle.length));
   const values = cycle.values || [];
@@ -115,6 +144,11 @@ function buildManualOverrideMap(overrides) {
   return map;
 }
 
+function passProbability(difficulty, coeff, itemUseRate = 0) {
+  const raw = 1 / Math.max(0.001, ((Math.max(1, difficulty) - 1) * coeff) + 1);
+  return Math.min(1, Math.max(0, raw + itemUseRate - itemUseRate * raw));
+}
+
 function computeModel(config) {
   const levelCount = Math.max(1, Math.round(num(config.levelCount, 300)));
   const guideSet = levelSet(config.specialRules.guideLevels || []);
@@ -130,7 +164,8 @@ function computeModel(config) {
 
   const rows = [];
   for (let levelId = 1; levelId <= levelCount; levelId += 1) {
-    const growth = evaluateGrowthFormula(config.growth.formula, levelId);
+    const baseGrowth = evaluateGrowthFormula(config.growth.formulaNumerator || buildGrowthFormula(config.growth), levelId);
+    const growth = evaluateGrowthFormula(buildGrowthFormula(config.growth), levelId);
     const cycleFactor = getCycleFactor(levelId, config.cycle);
     const cycleValue = growth * cycleFactor;
 
@@ -165,7 +200,8 @@ function computeModel(config) {
 
     rows.push({
       levelId,
-      growth,
+      growth: baseGrowth,
+      formulaGrowth: growth,
       cycleFactor,
       cycleValue,
       adjusted,
@@ -183,6 +219,8 @@ function computeModel(config) {
   const avg100 = rollingAverage(finalSeries, 100);
   const fullBuffBaseShare = Math.min(1, Math.max(0, num(config.buffModel.fullBuffBaseShare, 0.1)));
   const fullBuffProbability = rows.map((row, idx) => Math.min(1, fullBuffBaseShare + Math.max(0, row.buffed - 1) / 10 + idx / Math.max(200, rows.length * 2)));
+  const itemUseRate = Math.min(1, Math.max(0, num(config.buffModel.fullBuffItemUseRate, 0)));
+  const theoreticalRows = [];
 
   rows.forEach((row, idx) => {
     row.avg10 = avg10[idx];
@@ -190,6 +228,39 @@ function computeModel(config) {
     row.avg50 = avg50[idx];
     row.avg100 = avg100[idx];
     row.fullBuffProbability = fullBuffProbability[idx];
+
+    if (idx < 30) {
+      const fail0 = idx === 29 ? 1 : 0;
+      const buffCounts = [1, 0, 0, 0, 0, 0];
+      theoreticalRows.push({ fail0, buffCounts });
+      row.theoreticalBuffDistribution = [1, 0, 0, 0, 0, 0];
+      return;
+    }
+
+    const prev = theoreticalRows[idx - 1] || { fail0: 1, buffCounts: [1, 0, 0, 0, 0, 0] };
+    const prevDifficulty = rows[idx - 1]?.adjusted ?? row.adjusted;
+    const currentDifficulty = row.adjusted;
+    const prevPass = decay.map((coeff, buffIndex) => passProbability(prevDifficulty, coeff, buffIndex === 5 ? itemUseRate : 0));
+    const currentPass = decay.map((coeff, buffIndex) => passProbability(currentDifficulty, coeff, buffIndex === 5 ? itemUseRate : 0));
+    const buffCounts = [
+      0,
+      prev.fail0,
+      prev.buffCounts[1] * prevPass[1],
+      prev.buffCounts[2] * prevPass[2],
+      prev.buffCounts[3] * prevPass[3],
+      (prev.buffCounts[4] * prevPass[4]) + (prev.buffCounts[5] * prevPass[5]),
+    ];
+    const fail0 = buffCounts[1] * (1 - currentPass[1])
+      + buffCounts[2] * (1 - currentPass[2])
+      + buffCounts[3] * (1 - currentPass[3])
+      + buffCounts[4] * (1 - currentPass[4])
+      + buffCounts[5] * (1 - currentPass[5]);
+    buffCounts[0] = fail0 * currentDifficulty;
+    const total = buffCounts.reduce((sum, value) => sum + Math.max(0, value), 0);
+    theoreticalRows.push({ fail0, buffCounts });
+    row.theoreticalBuffDistribution = total > 0
+      ? buffCounts.map((value) => Math.max(0, value) / total)
+      : [1, 0, 0, 0, 0, 0];
   });
 
   return { rows, avg10, avg20, avg50, avg100 };
@@ -201,18 +272,58 @@ function $(id) {
 
 function initEls() {
   [
-    'dataSource','resetBtn','exportBtn','levelCount','growthFormula','cycleLength','cycleValues',
+    'dataSource','resetBtn','saveBtn','exportBtn','levelCount','growthFormulaNumerator','growthFormulaDenominator','cycleLength','cycleValues',
     'guideDifficulty','coinDifficulty','tailCapMax','tailCapWindow','tailCapEnabled','streakEnabled','streakExtraDefault','guideLevels',
-    'coinLevels','buffGrid','halfStepThreshold','integerThreshold','halfStep','projectTitle','heroStats',
+    'coinLevels','buffGrid','halfStepThreshold','integerThreshold','projectTitle','heroStats',
     'focusStart','focusEnd','focusTable','overrideTable','curveCanvas','trendCanvas','protocolWarning',
-    'runtimeWarning','runtimeWarningText','showGrowth','showCycle','showBuffed','showFinal','showAvg10','showAvg20','showAvg50','showAvg100','exportFocusBtn','cycleAverageValue'
+    'runtimeWarning','runtimeWarningText','showGrowth','showFinal','showTrendGrowth','showAvg10','showAvg20','showAvg50','showAvg100',
+    'showBuff0','showBuff1','showBuff2','showBuff3','showBuff4','showBuff5','buffDistributionCanvas','exportFocusBtn','cycleAverageValue'
   ].forEach((id) => { els[id] = $(id); });
 }
 
+function savedConfigKey(key = state.currentKey) {
+  return `${SAVED_CONFIG_PREFIX}${key}`;
+}
+
+function loadSavedConfig(key) {
+  try {
+    const raw = localStorage.getItem(savedConfigKey(key));
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    console.warn('读取本地保存配置失败。', error);
+    return null;
+  }
+}
+
+function saveCurrentConfig() {
+  try {
+    updateConfigFromForm();
+    localStorage.setItem(savedConfigKey(), JSON.stringify(state.config));
+    if (els.saveBtn) {
+      els.saveBtn.textContent = '已保存';
+      window.clearTimeout(els.saveBtn._labelTimer);
+      els.saveBtn._labelTimer = window.setTimeout(() => {
+        els.saveBtn.textContent = '保存当前配置';
+      }, 1400);
+    }
+  } catch (error) {
+    showRuntimeWarning(error.message || '保存失败，请检查当前输入。');
+  }
+}
+
+function clearSavedConfig(key = state.currentKey) {
+  localStorage.removeItem(savedConfigKey(key));
+}
+
+function cloneConfigForKey(key) {
+  return deepClone(loadSavedConfig(key) || state.seeds[key]);
+}
 function configToForm() {
   const c = state.config;
   els.levelCount.value = c.levelCount;
-  els.growthFormula.value = c.growth.formula;
+  const growthParts = splitGrowthFormula(c.growth.formula);
+  els.growthFormulaNumerator.value = c.growth.formulaNumerator ?? growthParts.numerator;
+  els.growthFormulaDenominator.value = c.growth.formulaDenominator ?? growthParts.denominator;
   els.cycleLength.value = c.cycle.length;
   els.guideDifficulty.value = c.specialRules.guideDifficulty;
   els.coinDifficulty.value = c.specialRules.coinDifficulty;
@@ -225,13 +336,10 @@ function configToForm() {
   els.coinLevels.value = (c.specialRules.coinLevels || []).join(', ');
   els.halfStepThreshold.value = c.rounding.halfStepThreshold;
   els.integerThreshold.value = c.rounding.integerThreshold;
-  els.halfStep.value = c.rounding.halfStep;
   els.focusStart.value = 1;
-  els.focusEnd.value = c.levelCount;
-  els.showGrowth.checked = !!state.chartVisibility.growth;
-  els.showCycle.checked = !!state.chartVisibility.cycle;
-  els.showBuffed.checked = !!state.chartVisibility.buffed;
-  els.showFinal.checked = !!state.chartVisibility.final;
+  els.focusEnd.value = Math.min(c.levelCount, 2200);
+  if (els.showGrowth) els.showGrowth.checked = !!state.chartVisibility.growth;
+  if (els.showFinal) els.showFinal.checked = !!state.chartVisibility.final;
   syncLegendState();
   buildCycleValueInputs();
   buildBuffInputs();
@@ -241,7 +349,9 @@ function configToForm() {
 function updateConfigFromForm() {
   const c = state.config;
   c.levelCount = Math.round(num(els.levelCount.value, c.levelCount));
-  c.growth.formula = els.growthFormula.value.trim() || c.growth.formula;
+  c.growth.formulaNumerator = els.growthFormulaNumerator.value.trim() || c.growth.formulaNumerator || '';
+  c.growth.formulaDenominator = String(num(els.growthFormulaDenominator.value, num(c.growth.formulaDenominator, 1))).trim() || String(c.growth.formulaDenominator || 1);
+  c.growth.formula = buildGrowthFormula(c.growth);
   c.cycle.length = Math.max(1, Math.round(num(els.cycleLength.value, c.cycle.length)));
   c.specialRules.guideDifficulty = num(els.guideDifficulty.value, c.specialRules.guideDifficulty);
   c.specialRules.coinDifficulty = num(els.coinDifficulty.value, c.specialRules.coinDifficulty);
@@ -254,7 +364,7 @@ function updateConfigFromForm() {
   c.specialRules.coinLevels = parseLevelList(els.coinLevels.value);
   c.rounding.halfStepThreshold = num(els.halfStepThreshold.value, c.rounding.halfStepThreshold);
   c.rounding.integerThreshold = num(els.integerThreshold.value, c.rounding.integerThreshold);
-  c.rounding.halfStep = num(els.halfStep.value, c.rounding.halfStep);
+  c.rounding.halfStep = num(c.rounding.halfStep, 0.5);
 }
 
 function updateCycleAverage() {
@@ -293,7 +403,7 @@ function buildBuffInputs() {
   els.buffGrid.innerHTML = '';
   for (let i = 0; i < 6; i += 1) {
     const wrap = document.createElement('div');
-    wrap.className = 'panel';
+    wrap.className = 'buff-item';
     wrap.innerHTML = `
       <h2>Buff ${i}</h2>
       <label>占比<input data-kind="weight" data-index="${i}" type="number" step="0.01" value="${state.config.buffModel.weights[i] ?? 0}"></label>
@@ -316,12 +426,13 @@ function buildOverrideTable() {
   const existing = buildManualOverrideMap(state.config.manualOverrides);
   els.overrideTable.innerHTML = '';
   for (let levelId = 1; levelId <= maxRows; levelId += 1) {
-    const tr = document.createElement('tr');
+    const item = document.createElement('label');
+    item.className = 'override-item';
     const value = existing.has(levelId) ? existing.get(levelId) : '';
-    tr.innerHTML = `<td>${levelId}</td><td><input type="number" step="0.1" value="${value}"></td>`;
-    const input = tr.querySelector('input');
+    item.innerHTML = `<span>第 ${levelId} 关</span><input type="number" step="0.1" value="${value}" aria-label="第 ${levelId} 关难度">`;
+    const input = item.querySelector('input');
     input.addEventListener('input', () => {
-      const idx = state.config.manualOverrides.findIndex((item) => Math.round(num(item.levelId, 0)) === levelId);
+      const idx = state.config.manualOverrides.findIndex((entry) => Math.round(num(entry.levelId, 0)) === levelId);
       const raw = input.value.trim();
       if (raw === '') {
         if (idx >= 0) state.config.manualOverrides.splice(idx, 1);
@@ -332,7 +443,7 @@ function buildOverrideTable() {
       }
       recompute();
     });
-    els.overrideTable.appendChild(tr);
+    els.overrideTable.appendChild(item);
   }
 }
 
@@ -375,7 +486,6 @@ function renderFocusTable() {
       <td>${row.growth.toFixed(2)}</td>
       <td>${row.cycleValue.toFixed(2)}</td>
       <td>${row.adjusted.toFixed(2)}</td>
-      <td>${row.buffed.toFixed(2)}</td>
       <td>${row.finalDifficulty.toFixed(1)}</td>
       <td>${row.avg10.toFixed(2)}</td>
       <td>${row.avg20.toFixed(2)}</td>
@@ -383,6 +493,88 @@ function renderFocusTable() {
       <td>${row.avg100.toFixed(2)}</td>
     </tr>
   `).join('');
+}
+
+
+function drawBuffDistributionBars(canvas, rows) {
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+  const padding = { top: 20, right: 22, bottom: 46, left: 48 };
+  const colors = ['#15a8d8', '#8fcf00', '#f04d44', '#ffd64d', '#9a45a0', '#55b878'];
+  const names = ['0?buff', '1?buff', '2?buff', '3?buff', '4?buff', '5?buff'];
+  const visible = names.map((_, idx) => state.buffVisibility[`buff${idx}`] !== false);
+  hideChartTooltip();
+  ctx.clearRect(0, 0, width, height);
+  canvas.__chartMeta = null;
+  window.__chartMetaById = window.__chartMetaById || {};
+  window.__chartMetaById[canvas.id] = null;
+  if (!rows.length || !visible.some(Boolean)) return;
+
+  const usableW = width - padding.left - padding.right;
+  const usableH = height - padding.top - padding.bottom;
+  const pointCount = rows.length;
+  const gap = pointCount > 80 ? 1 : 2;
+  const barW = Math.max(1, (usableW / pointCount) - gap);
+  const y = (value) => padding.top + usableH - value * usableH;
+
+  ctx.strokeStyle = '#d7e0e8';
+  ctx.lineWidth = 1;
+  ctx.fillStyle = '#66788a';
+  ctx.font = '12px Arial';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i <= 5; i += 1) {
+    const value = i / 5;
+    const py = y(value);
+    ctx.beginPath();
+    ctx.moveTo(padding.left, py);
+    ctx.lineTo(width - padding.right, py);
+    ctx.stroke();
+    ctx.fillText(`${Math.round(value * 100)}%`, padding.left - 8, py);
+  }
+
+  rows.forEach((row, index) => {
+    const distribution = row.theoreticalBuffDistribution || [1, 0, 0, 0, 0, 0];
+    let stackTop = 0;
+    const x = padding.left + (index / pointCount) * usableW + gap / 2;
+    distribution.forEach((value, buffIndex) => {
+      if (!visible[buffIndex]) return;
+      const share = Math.max(0, value);
+      const yTop = y(stackTop + share);
+      const yBottom = y(stackTop);
+      ctx.fillStyle = colors[buffIndex];
+      ctx.fillRect(x, yTop, barW, Math.max(1, yBottom - yTop));
+      stackTop += share;
+    });
+  });
+
+  const levelIds = rows.map((row) => row.levelId);
+  const desiredTicks = Math.min(14, Math.max(2, Math.floor(usableW / 72)));
+  const tickEvery = Math.max(1, Math.ceil(pointCount / desiredTicks));
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = '#66788a';
+  for (let index = 0; index < pointCount; index += tickEvery) {
+    const px = padding.left + (index / Math.max(1, pointCount - 1)) * usableW;
+    ctx.strokeStyle = '#edf2f6';
+    ctx.beginPath();
+    ctx.moveTo(px, padding.top);
+    ctx.lineTo(px, height - padding.bottom);
+    ctx.stroke();
+    ctx.fillStyle = '#66788a';
+    ctx.fillText(String(levelIds[index]), px, height - padding.bottom + 12);
+  }
+  if ((pointCount - 1) % tickEvery !== 0) {
+    const px = width - padding.right;
+    ctx.fillText(String(levelIds[pointCount - 1]), px, height - padding.bottom + 12);
+  }
+
+  const visibleEntries = names.map((name, idx) => ({ name, color: colors[idx], visible: visible[idx], decimals: 1 }));
+  const meta = { type: 'stackedPercent', padding, pointCount, levelIds, rows, visibleEntries };
+  canvas.__chartMeta = meta;
+  window.__chartMetaById[canvas.id] = meta;
 }
 
 function drawLines(canvas, seriesEntries, options = {}) {
@@ -479,6 +671,7 @@ function getChartTooltip() {
     document.body.appendChild(tooltip);
   }
   tooltip.hidden = true;
+  tooltip.style.display = 'none';
   els.chartTooltip = tooltip;
   return tooltip;
 }
@@ -487,6 +680,7 @@ function hideChartTooltip() {
   const tooltip = els.chartTooltip || document.querySelector('.chart-tooltip');
   if (!tooltip) return;
   tooltip.hidden = true;
+  tooltip.style.display = 'none';
   tooltip.innerHTML = '';
 }
 
@@ -507,7 +701,7 @@ function setupChartTooltip(canvas) {
     const scaleY = canvas.height / rect.height;
     const px = (event.clientX - rect.left) * scaleX;
     const py = (event.clientY - rect.top) * scaleY;
-    const { padding, min, max, pointCount, levelIds, visibleEntries } = meta;
+    const { padding, pointCount, levelIds, visibleEntries } = meta;
     const usableW = canvas.width - padding.left - padding.right;
     const usableH = canvas.height - padding.top - padding.bottom;
     const inPlot = px >= padding.left && px <= canvas.width - padding.right && py >= padding.top && py <= canvas.height - padding.bottom;
@@ -519,9 +713,13 @@ function setupChartTooltip(canvas) {
     const rawIndex = ((px - padding.left) / Math.max(1, usableW)) * Math.max(1, pointCount - 1);
     const index = Math.min(pointCount - 1, Math.max(0, Math.round(rawIndex)));
 
-    const rows = visibleEntries
-      .map((entry) => ({ entry, value: entry.data[index] }))
-      .filter((item) => Number.isFinite(item.value));
+    const rows = meta.type === 'stackedPercent'
+      ? visibleEntries
+        .map((entry, buffIndex) => ({ entry, value: meta.rows[index]?.theoreticalBuffDistribution?.[buffIndex] * 100 }))
+        .filter((item) => item.entry.visible !== false && Number.isFinite(item.value))
+      : visibleEntries
+        .map((entry) => ({ entry, value: entry.data[index] }))
+        .filter((item) => Number.isFinite(item.value));
 
     if (!rows.length) {
       hideChartTooltip();
@@ -533,6 +731,7 @@ function setupChartTooltip(canvas) {
     tooltip.style.left = `${event.clientX + 14}px`;
     tooltip.style.top = `${event.clientY + 14}px`;
     tooltip.hidden = false;
+    tooltip.style.display = 'grid';
   });
 
   canvas.addEventListener('mouseleave', hideChartTooltip);
@@ -544,12 +743,15 @@ function setupChartTooltip(canvas) {
 function renderChart() {
   const rows = state.result.rows;
   const seriesEntries = [
-    { key: 'growth', name: '基础增长', data: rows.map((r) => r.growth), color: '#1769aa', visible: state.chartVisibility.growth },
-    { key: 'cycle', name: '周期修正', data: rows.map((r) => r.cycleValue), color: '#d26b36', visible: state.chartVisibility.cycle },
-    { key: 'buffed', name: 'Buff体感', data: rows.map((r) => r.buffed), color: '#a25ddc', visible: state.chartVisibility.buffed },
-    { key: 'final', name: '最终输出', data: rows.map((r) => r.finalDifficulty), color: '#2f8f72', visible: state.chartVisibility.final, lineWidth: 2.5, decimals: 1 },
+    { key: 'final', name: '最终输出', data: rows.map((r) => r.finalDifficulty), color: '#2f8f72', visible: state.chartVisibility.final, lineWidth: 2.8, decimals: 1 },
+    { key: 'growth', name: '基础增长', data: rows.map((r) => r.growth), color: '#d7a300', visible: state.chartVisibility.growth, lineWidth: 2.2 },
   ];
   drawLines(els.curveCanvas, seriesEntries, { levelIds: rows.map((r) => r.levelId) });
+}
+
+function renderBuffDistributionChart() {
+  const rows = focusRowsData();
+  drawBuffDistributionBars(els.buffDistributionCanvas, rows);
 }
 
 function renderTrendChart() {
@@ -560,12 +762,13 @@ function renderTrendChart() {
     { name: '近20关', data: rows.map((r) => r.avg20), color: '#1769aa', lineWidth: 2, visible: state.trendVisibility.avg20, decimals: 2 },
     { name: '近50关', data: rows.map((r) => r.avg50), color: '#2f8f72', lineWidth: 2, visible: state.trendVisibility.avg50, decimals: 2 },
     { name: '近100关', data: rows.map((r) => r.avg100), color: '#8a63d2', lineWidth: 2, visible: state.trendVisibility.avg100, decimals: 2 },
+    { name: '基础增长曲线', data: rows.map((r) => r.growth), color: '#d7a300', lineWidth: 2.2, visible: state.trendVisibility.growth, decimals: 2 },
   ];
   drawLines(els.trendCanvas, seriesEntries, { levelIds: rows.map((r) => r.levelId) });
 }
 
 function syncLegendState() {
-  ['showGrowth', 'showCycle', 'showBuffed', 'showFinal', 'showAvg10', 'showAvg20', 'showAvg50', 'showAvg100'].forEach((id) => {
+  ['showGrowth', 'showFinal', 'showTrendGrowth', 'showAvg10', 'showAvg20', 'showAvg50', 'showAvg100', 'showBuff0', 'showBuff1', 'showBuff2', 'showBuff3', 'showBuff4', 'showBuff5'].forEach((id) => {
     const input = els[id];
     if (!input) return;
     input.closest('.legend-toggle')?.classList.toggle('off', !input.checked);
@@ -591,13 +794,18 @@ function recompute() {
     renderHero();
     renderFocusTable();
     renderChart();
+    renderBuffDistributionChart();
     renderTrendChart();
     syncLegendState();
     syncSpecialRuleControls();
-    els.growthFormula.style.borderColor = '';
+    ['growthFormulaNumerator','growthFormulaDenominator'].forEach((id) => {
+      if (els[id]) els[id].style.borderColor = '';
+    });
   } catch (error) {
     state.result = null;
-    els.growthFormula.style.borderColor = '#b00020';
+    ['growthFormulaNumerator','growthFormulaDenominator'].forEach((id) => {
+      if (els[id]) els[id].style.borderColor = '#b00020';
+    });
     showRuntimeWarning(error.message || '计算失败，请检查当前输入。');
     console.error(error);
   }
@@ -605,13 +813,12 @@ function recompute() {
 
 function exportFocusTable() {
   const rows = focusRowsData();
-  const header = ['关卡', '基础增长', '周期修正', '特殊关后', 'Buff体感', '最终难度', '近10关', '近20关', '近50关', '近100关'];
+  const header = ['关卡', '基础增长', '周期修正', '特殊关修正', '最终难度', '近10关', '近20关', '近50关', '近100关'];
   const lines = [header.join(',')].concat(rows.map((row) => [
     row.levelId,
     row.growth.toFixed(2),
     row.cycleValue.toFixed(2),
     row.adjusted.toFixed(2),
-    row.buffed.toFixed(2),
     row.finalDifficulty.toFixed(1),
     row.avg10.toFixed(2),
     row.avg20.toFixed(2),
@@ -630,9 +837,9 @@ function exportFocusTable() {
 
 function bindBaseInputs() {
   [
-    'levelCount','growthFormula','cycleLength','guideDifficulty','coinDifficulty','tailCapMax',
+    'levelCount','growthFormulaNumerator','growthFormulaDenominator','cycleLength','guideDifficulty','coinDifficulty','tailCapMax',
     'tailCapWindow','tailCapEnabled','streakEnabled','guideLevels','coinLevels','halfStepThreshold',
-    'integerThreshold','halfStep','focusStart','focusEnd'
+    'integerThreshold','focusStart','focusEnd'
   ].forEach((id) => {
     if (!els[id]) return;
     els[id].addEventListener('input', () => {
@@ -647,20 +854,23 @@ function bindBaseInputs() {
     });
   });
 
-  els.dataSource.addEventListener('change', () => {
+  if (els.dataSource) els.dataSource.addEventListener('change', () => {
     state.currentKey = els.dataSource.value;
+    state.config = cloneConfigForKey(state.currentKey);
+    configToForm();
+    recompute();
+  });
+
+  if (els.resetBtn) els.resetBtn.addEventListener('click', () => {
+    clearSavedConfig();
     state.config = deepClone(state.seeds[state.currentKey]);
     configToForm();
     recompute();
   });
 
-  els.resetBtn.addEventListener('click', () => {
-    state.config = deepClone(state.seeds[state.currentKey]);
-    configToForm();
-    recompute();
-  });
+  if (els.saveBtn) els.saveBtn.addEventListener('click', saveCurrentConfig);
 
-  els.exportBtn.addEventListener('click', () => {
+  if (els.exportBtn) els.exportBtn.addEventListener('click', () => {
     const blob = new Blob([JSON.stringify(state.config, null, 2)], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -672,10 +882,9 @@ function bindBaseInputs() {
 
   [
     ['showGrowth', 'growth'],
-    ['showCycle', 'cycle'],
-    ['showBuffed', 'buffed'],
     ['showFinal', 'final'],
   ].forEach(([id, key]) => {
+    if (!els[id]) return;
     els[id].addEventListener('change', () => {
       state.chartVisibility[key] = els[id].checked;
       syncLegendState();
@@ -684,11 +893,29 @@ function bindBaseInputs() {
   });
 
   [
+    ['showBuff0', 'buff0'],
+    ['showBuff1', 'buff1'],
+    ['showBuff2', 'buff2'],
+    ['showBuff3', 'buff3'],
+    ['showBuff4', 'buff4'],
+    ['showBuff5', 'buff5'],
+  ].forEach(([id, key]) => {
+    if (!els[id]) return;
+    els[id].addEventListener('change', () => {
+      state.buffVisibility[key] = els[id].checked;
+      syncLegendState();
+      renderBuffDistributionChart();
+    });
+  });
+
+  [
+    ['showTrendGrowth', 'growth'],
     ['showAvg10', 'avg10'],
     ['showAvg20', 'avg20'],
     ['showAvg50', 'avg50'],
     ['showAvg100', 'avg100'],
   ].forEach(([id, key]) => {
+    if (!els[id]) return;
     els[id].addEventListener('change', () => {
       state.trendVisibility[key] = els[id].checked;
       syncLegendState();
@@ -696,7 +923,7 @@ function bindBaseInputs() {
     });
   });
 
-  els.exportFocusBtn.addEventListener('click', exportFocusTable);
+  if (els.exportFocusBtn) els.exportFocusBtn.addEventListener('click', exportFocusTable);
 }
 
 function buildReferenceCycleValues() {
@@ -761,12 +988,13 @@ async function init() {
 
   state.seeds.default = defaultSeed;
   state.seeds.default.specialRules = { ...state.seeds.default.specialRules, streakExtraDefault: 1.1 };
-  state.config = deepClone(state.seeds[state.currentKey]);
+  state.config = cloneConfigForKey(state.currentKey);
   updateProtocolWarning();
   els.dataSource.value = state.currentKey;
   configToForm();
   bindBaseInputs();
   setupChartTooltip(els.curveCanvas);
+  setupChartTooltip(els.buffDistributionCanvas);
   setupChartTooltip(els.trendCanvas);
   window.addEventListener('scroll', hideChartTooltip, true);
   window.addEventListener('blur', hideChartTooltip);
@@ -777,29 +1005,3 @@ async function init() {
 init().catch((error) => {
   document.body.innerHTML = `<pre style="padding:24px;color:#b00020;white-space:pre-wrap;">初始化失败\n${error.message}</pre>`;
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

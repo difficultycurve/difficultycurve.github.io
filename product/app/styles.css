@@ -447,6 +447,12 @@ button.secondary:hover { background: #d4e0eb; }
 .swatch.avg20 { background: var(--avg20); }
 .swatch.avg50 { background: var(--avg50); }
 .swatch.avg100 { background: var(--avg100); }
+.swatch.buff0 { background: #15a8d8; }
+.swatch.buff1 { background: #8fcf00; }
+.swatch.buff2 { background: #f04d44; }
+.swatch.buff3 { background: #ffd64d; border: 1px solid #d3ad20; }
+.swatch.buff4 { background: #9a45a0; }
+.swatch.buff5 { background: #55b878; }
 
 .chart-wrap {
   width: 100%;
