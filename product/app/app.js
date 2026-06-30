@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260630-05';
+const DATA_VERSION = '20260630-06';
 
 const state = {
   seeds: {},
@@ -231,9 +231,10 @@ function computeModel(config) {
 
     if (idx < 30) {
       const fail0 = idx === 29 ? 1 : 0;
-      const buffCounts = [1, 0, 0, 0, 0, 0];
+      const buffCounts = [0, 0, 0, 0, 0, 0];
       theoreticalRows.push({ fail0, buffCounts });
-      row.theoreticalBuffDistribution = [1, 0, 0, 0, 0, 0];
+      row.theoreticalZeroBuffRate = fail0;
+      row.theoreticalBuffDistribution = [fail0, 0, 0, 0, 0, 0];
       row.theoreticalFirstBuffDistribution = [0, 0, 0, 0, 0];
       return;
     }
@@ -256,17 +257,11 @@ function computeModel(config) {
       + buffCounts[3] * (1 - currentPass[3])
       + buffCounts[4] * (1 - currentPass[4])
       + buffCounts[5] * (1 - currentPass[5]);
-    buffCounts[0] = fail0 * currentDifficulty;
-    const total = buffCounts.reduce((sum, value) => sum + Math.max(0, value), 0);
+    buffCounts[0] = fail0;
     theoreticalRows.push({ fail0, buffCounts });
-    row.theoreticalBuffDistribution = total > 0
-      ? buffCounts.map((value) => Math.max(0, value) / total)
-      : [1, 0, 0, 0, 0, 0];
-    const firstBuffCounts = buffCounts.slice(1);
-    const firstBuffTotal = firstBuffCounts.reduce((sum, value) => sum + Math.max(0, value), 0);
-    row.theoreticalFirstBuffDistribution = firstBuffTotal > 0
-      ? firstBuffCounts.map((value) => Math.max(0, value) / firstBuffTotal)
-      : [0, 0, 0, 0, 0];
+    row.theoreticalZeroBuffRate = fail0;
+    row.theoreticalBuffDistribution = buffCounts;
+    row.theoreticalFirstBuffDistribution = buffCounts.slice(1);
   });
 
   return { rows, avg10, avg20, avg50, avg100 };
@@ -501,7 +496,7 @@ function renderFocusTable() {
       <td>${row.avg20.toFixed(2)}</td>
       <td>${row.avg50.toFixed(2)}</td>
       <td>${row.avg100.toFixed(2)}</td>
-      <td>${formatPercent(row.theoreticalBuffDistribution?.[0])}</td>
+      <td>${formatPercent(row.theoreticalZeroBuffRate)}</td>
       <td>${formatPercent(row.theoreticalFirstBuffDistribution?.[0])}</td>
       <td>${formatPercent(row.theoreticalFirstBuffDistribution?.[1])}</td>
       <td>${formatPercent(row.theoreticalFirstBuffDistribution?.[2])}</td>
@@ -830,7 +825,7 @@ function recompute() {
 
 function exportFocusTable() {
   const rows = focusRowsData();
-  const header = ['关卡', '基础增长', '周期修正', '特殊关修正', '最终难度', '近10关', '近20关', '近50关', '近100关'];
+  const header = ['关卡', '基础增长', '周期修正', '特殊关修正', '最终难度', '近10关', '近20关', '近50关', '近100关', '\u9996\u8f930buff\u7387', '\u9996\u95ef1\u7ea7buff\u7387', '\u9996\u95ef2\u7ea7buff\u7387', '\u9996\u95ef3\u7ea7buff\u7387', '\u9996\u95ef4\u7ea7buff\u7387', '\u9996\u95ef5\u7ea7buff\u7387'];
   const lines = [header.join(',')].concat(rows.map((row) => [
     row.levelId,
     row.growth.toFixed(2),
@@ -841,7 +836,7 @@ function exportFocusTable() {
     row.avg20.toFixed(2),
     row.avg50.toFixed(2),
     row.avg100.toFixed(2),
-    formatPercent(row.theoreticalBuffDistribution?.[0]),
+    formatPercent(row.theoreticalZeroBuffRate),
     formatPercent(row.theoreticalFirstBuffDistribution?.[0]),
     formatPercent(row.theoreticalFirstBuffDistribution?.[1]),
     formatPercent(row.theoreticalFirstBuffDistribution?.[2]),
