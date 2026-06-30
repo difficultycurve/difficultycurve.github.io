@@ -405,6 +405,15 @@ button.secondary:hover { background: #d4e0eb; }
 
 .legend { justify-content: flex-end; }
 
+.chart-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.chart-actions button { min-height: 30px; padding: 5px 10px; font-size: 12px; }
+
 .legend-toggle {
   position: relative;
   display: inline-flex;
