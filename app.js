@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260630-03';
+const DATA_VERSION = '20260630-04';
 
 const state = {
   seeds: {},
@@ -283,7 +283,7 @@ function initEls() {
     'coinLevels','buffGrid','halfStepThreshold','integerThreshold','projectTitle','heroStats',
     'focusStart','focusEnd','focusTable','overrideTable','curveCanvas','trendCanvas','protocolWarning',
     'runtimeWarning','runtimeWarningText','showGrowth','showFinal','showTrendGrowth','showAvg10','showAvg20','showAvg50','showAvg100',
-    'showBuff1','showBuff2','showBuff3','showBuff4','showBuff5','buffDistributionCanvas','exportBuffDistributionBtn','exportFocusBtn','cycleAverageValue'
+    'showBuff1','showBuff2','showBuff3','showBuff4','showBuff5','buffDistributionCanvas','exportFocusBtn','cycleAverageValue'
   ].forEach((id) => { els[id] = $(id); });
 }
 
@@ -828,26 +828,6 @@ function recompute() {
 }
 
 
-function exportBuffDistributionData() {
-  const rows = focusRowsData();
-  const header = ['\u5173\u5361', '0\u7ea7buff\u5360\u6bd4', '1\u7ea7buff\u5360\u6bd4', '2\u7ea7buff\u5360\u6bd4', '3\u7ea7buff\u5360\u6bd4', '4\u7ea7buff\u5360\u6bd4', '5\u7ea7buff\u5360\u6bd4'];
-  const lines = [header.join(',')].concat(rows.map((row) => {
-    const distribution = row.theoreticalFirstBuffDistribution || [0, 0, 0, 0, 0];
-    return [
-      row.levelId,
-      ...distribution.map((value) => (Math.max(0, value) * 100).toFixed(2) + '%'),
-    ].join(',');
-  }));
-  const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const range = getFocusRange();
-  a.href = url;
-  a.download = `theoretical-buff-distribution-${range.start}-${range.end}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 function exportFocusTable() {
   const rows = focusRowsData();
   const header = ['关卡', '基础增长', '周期修正', '特殊关修正', '最终难度', '近10关', '近20关', '近50关', '近100关'];
@@ -965,7 +945,6 @@ function bindBaseInputs() {
     });
   });
 
-  if (els.exportBuffDistributionBtn) els.exportBuffDistributionBtn.addEventListener('click', exportBuffDistributionData);
   if (els.exportFocusBtn) els.exportFocusBtn.addEventListener('click', exportFocusTable);
 }
 
