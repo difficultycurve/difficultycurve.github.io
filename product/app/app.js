@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260630-06';
+const DATA_VERSION = '20260630-07';
 
 const state = {
   seeds: {},
@@ -995,7 +995,7 @@ async function init() {
     },
     buffModel: {
       weights: referenceSeed.modelSeed?.buffWeights || defaultSeed.buffModel.weights,
-      decay: [1, 0.92, 0.84, 0.78, 0.72, 0.66],
+      decay: [1, 0.6302319468, 0.4392866662, 0.3316306420, 0.1993753807, 0.0771788931],
       fullBuffBaseShare: 0.1,
     },
     manualOverrides: (referenceSeed.manualOverrides || [])
