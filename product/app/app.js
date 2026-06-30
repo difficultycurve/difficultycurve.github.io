@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260630-04';
+const DATA_VERSION = '20260630-05';
 
 const state = {
   seeds: {},
@@ -519,7 +519,7 @@ function drawBuffDistributionBars(canvas, rows) {
   const height = canvas.height;
   const padding = { top: 20, right: 22, bottom: 46, left: 48 };
   const colors = ['#8fcf00', '#f04d44', '#ffd64d', '#9a45a0', '#55b878'];
-  const names = ['\u9996\u95ef1\u7ea7buff\u6bd4\u4f8b', '\u9996\u95ef2\u7ea7buff\u6bd4\u4f8b', '\u9996\u95ef3\u7ea7buff\u6bd4\u4f8b', '\u9996\u95ef4\u7ea7buff\u6bd4\u4f8b', '\u9996\u95ef5\u7ea7buff\u6bd4\u4f8b'];
+  const names = ['\u9996\u95ef1\u7ea7buff\u7387', '\u9996\u95ef2\u7ea7buff\u7387', '\u9996\u95ef3\u7ea7buff\u7387', '\u9996\u95ef4\u7ea7buff\u7387', '\u9996\u95ef5\u7ea7buff\u7387'];
   const visible = names.map((_, idx) => state.buffVisibility[`buff${idx + 1}`] !== false);
   hideChartTooltip();
   ctx.clearRect(0, 0, width, height);
