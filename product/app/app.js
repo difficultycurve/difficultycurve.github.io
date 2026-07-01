@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260701-08';
+const DATA_VERSION = '20260701-09';
 
 const state = {
   seeds: {},
@@ -528,18 +528,21 @@ function renderHero() {
 
 function getFocusRange() {
   const total = state.result.rows.length;
-  let start = Math.max(1, Math.round(num(els.focusStart.value, 1)));
-  let end = Math.max(1, Math.round(num(els.focusEnd.value, Math.min(total, start + 19))));
-  start = Math.min(start, total);
-  end = Math.min(end, total);
-  els.focusStart.value = start;
-  els.focusEnd.value = end;
+  const rawStart = els.focusStart.value.trim();
+  const rawEnd = els.focusEnd.value.trim();
+  if (rawStart === '' || rawEnd === '') return null;
+  const start = Math.round(Number(rawStart));
+  const end = Math.round(Number(rawEnd));
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  if (start < 1 || end < 1) return null;
+  if (start > end) return null;
+  if (start > total) return null;
   return { start, end };
 }
 
 function focusRowsData() {
   const range = getFocusRange();
-  if (range.start > range.end) return [];
+  if (!range) return [];
   return state.result.rows.slice(range.start - 1, range.end);
 }
 
@@ -903,7 +906,8 @@ function recompute() {
 
 function exportFocusTable() {
   const rows = focusRowsData();
-  const header = ['关卡', '基础增长', '周期修正', '特殊关修正', '最终难度', '近10关', '近20关', '近50关', '近100关', '\u9996\u8f930buff\u7387', '\u9996\u95ef1\u7ea7buff\u7387', '\u9996\u95ef2\u7ea7buff\u7387', '\u9996\u95ef3\u7ea7buff\u7387', '\u9996\u95ef4\u7ea7buff\u7387', '\u9996\u95ef5\u7ea7buff\u7387'];
+  const range = getFocusRange();
+  const header = ['\u5173\u5361', '\u57fa\u7840\u589e\u957f', '\u5468\u671f\u4fee\u6b63', '\u7279\u6b8a\u5173\u4fee\u6b63', '\u6700\u7ec8\u96be\u5ea6', '\u8fd110\u5173', '\u8fd120\u5173', '\u8fd150\u5173', '\u8fd1100\u5173', '\u9996\u8f930buff\u7387', '\u9996\u95ef1\u7ea7buff\u7387', '\u9996\u95ef2\u7ea7buff\u7387', '\u9996\u95ef3\u7ea7buff\u7387', '\u9996\u95ef4\u7ea7buff\u7387', '\u9996\u95ef5\u7ea7buff\u7387'];
   const lines = [header.join(',')].concat(rows.map((row) => [
     row.levelId,
     row.growth.toFixed(2),
@@ -924,9 +928,12 @@ function exportFocusTable() {
   const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const range = getFocusRange();
+  if (!range) {
+    URL.revokeObjectURL(url);
+    return;
+  }
   a.href = url;
-  a.download = `difficulty-focus-${range.start}-${range.end}.csv`;
+  a.download = 'difficulty-focus-' + range.start + '-' + range.end + '.csv';
   a.click();
   URL.revokeObjectURL(url);
 }
