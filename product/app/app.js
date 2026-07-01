@@ -107,18 +107,27 @@ function applyGrowthCap(value, cap) {
   return limit === null ? value : Math.min(value, limit);
 }
 
+function getDefaultDifficultyPresentation(projectName) {
+  const isSh01 = String(projectName || '').toUpperCase() === 'SH01';
+  return {
+    noItemCoeff: isSh01 ? 5.5 : 1,
+    comprehensiveCoeff: isSh01 ? 7.5 : 1,
+  };
+}
+
 function getDifficultyPresentation(config) {
   const presentation = config?.difficultyPresentation || {};
+  const defaults = getDefaultDifficultyPresentation(config?.meta?.projectName);
   const mode = presentation.mode || 'bare';
   const coeff = mode === 'noItem'
-    ? num(presentation.noItemCoeff, NaN)
+    ? num(presentation.noItemCoeff, defaults.noItemCoeff)
     : mode === 'comprehensive'
-      ? num(presentation.comprehensiveCoeff, NaN)
+      ? num(presentation.comprehensiveCoeff, defaults.comprehensiveCoeff)
       : NaN;
   if (mode === 'bare' || !Number.isFinite(coeff) || coeff <= 0) {
-    return { mode: 'bare', coeff: null };
+    return { mode: 'bare', coeff: null, defaults };
   }
-  return { mode, coeff };
+  return { mode, coeff, defaults };
 }
 
 function getDifficultyPresentationLabel(mode) {
@@ -441,7 +450,8 @@ function cloneConfigForKey(key) {
 
 function configToForm() {
   const c = state.config;
-  const presentation = c.difficultyPresentation || {};
+  const defaults = getDefaultDifficultyPresentation(c.meta?.projectName);
+  const presentation = c.difficultyPresentation || defaults;
   els.levelCount.value = c.levelCount;
   const growthParts = splitGrowthFormula(c.growth.formula);
   els.growthFormulaNumerator.value = c.growth.formulaNumerator ?? growthParts.numerator;
@@ -449,8 +459,8 @@ function configToForm() {
   els.growthCap.value = c.growth.cap ?? '';
   els.cycleLength.value = c.cycle.length;
   if (els.difficultyPresentationMode) els.difficultyPresentationMode.value = presentation.mode || 'bare';
-  if (els.noItemCoeff) els.noItemCoeff.value = presentation.noItemCoeff ?? '';
-  if (els.comprehensiveCoeff) els.comprehensiveCoeff.value = presentation.comprehensiveCoeff ?? '';
+  if (els.noItemCoeff) els.noItemCoeff.value = presentation.noItemCoeff ?? defaults.noItemCoeff;
+  if (els.comprehensiveCoeff) els.comprehensiveCoeff.value = presentation.comprehensiveCoeff ?? defaults.comprehensiveCoeff;
   els.guideDifficulty.value = c.specialRules.guideDifficulty;
   els.coinDifficulty.value = c.specialRules.coinDifficulty;
   els.tailCapMax.value = c.specialRules.tailCapMax;
@@ -1180,6 +1190,7 @@ async function init() {
       decay: [1, 0.6302319468, 0.4392866662, 0.3316306420, 0.1993753807, 0.0771788931],
       fullBuffBaseShare: 0.1,
     },
+    difficultyPresentation: getDefaultDifficultyPresentation('PopH5'),
     manualOverrides: (referenceSeed.manualOverrides || [])
       .filter((item) => item.targetDifficulty !== null && item.targetDifficulty !== undefined)
       .map((item) => ({ levelId: item.levelId, difficulty: item.targetDifficulty })),
@@ -1187,6 +1198,7 @@ async function init() {
 
   state.seeds.default = deepClone(state.seeds.reference);
   state.seeds.default.meta = { ...state.seeds.default.meta, projectName: 'SH01' };
+  state.seeds.default.difficultyPresentation = getDefaultDifficultyPresentation('SH01');
   state.config = cloneConfigForKey(state.currentKey);
   updateProtocolWarning();
   els.dataSource.value = state.currentKey;
