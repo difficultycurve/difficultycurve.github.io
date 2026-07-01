@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260701-02';
+const DATA_VERSION = '20260701-03';
 
 const state = {
   seeds: {},
@@ -130,9 +130,13 @@ function rollingSum(values, windowSize) {
   const out = new Array(values.length).fill(null);
   let sum = 0;
   for (let i = 0; i < values.length; i += 1) {
-    sum += values[i];
-    if (i >= windowSize) sum -= values[i - windowSize];
-    out[i] = sum;
+    const current = Number.isFinite(values[i]) ? values[i] : 0;
+    sum += current;
+    if (i >= windowSize) {
+      const dropped = Number.isFinite(values[i - windowSize]) ? values[i - windowSize] : 0;
+      sum -= dropped;
+    }
+    out[i] = Number.isFinite(values[i]) ? sum : null;
   }
   return out;
 }
@@ -276,7 +280,7 @@ function computeModel(config) {
     row.theoreticalFirstBuffDistribution = buffCounts.slice(1);
   });
 
-  const fullBuffFirstRates = rows.map((row) => row.theoreticalFirstBuffDistribution?.[4] || 0);
+  const fullBuffFirstRates = rows.map((row, idx) => (idx < 30 ? null : (row.theoreticalFirstBuffDistribution?.[4] || 0)));
   const fullBuffExpected10 = rollingSum(fullBuffFirstRates, 10);
   const fullBuffExpected20 = rollingSum(fullBuffFirstRates, 20);
   const fullBuffExpected50 = rollingSum(fullBuffFirstRates, 50);
@@ -676,14 +680,16 @@ function drawLines(canvas, seriesEntries, options = {}) {
     ctx.beginPath();
     ctx.lineWidth = entry.lineWidth || 2;
     ctx.strokeStyle = entry.color;
+    let hasPoint = false;
     dataLoop: for (let index = 0; index < entry.data.length; index += 1) {
       const value = entry.data[index];
       if (!Number.isFinite(value)) continue dataLoop;
       const px = x(index);
       const py = y(value);
-      if (index === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      if (!hasPoint) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      hasPoint = true;
     }
-    ctx.stroke();
+    if (hasPoint) ctx.stroke();
   });
 
   ctx.textAlign = 'left';
