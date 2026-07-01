@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260701-03';
+const DATA_VERSION = '20260701-04';
 
 const state = {
   seeds: {},
@@ -236,6 +236,7 @@ function computeModel(config) {
   const fullBuffBaseShare = Math.min(1, Math.max(0, num(config.buffModel.fullBuffBaseShare, 0.1)));
   const fullBuffProbability = rows.map((row, idx) => Math.min(1, fullBuffBaseShare + Math.max(0, row.buffed - 1) / 10 + idx / Math.max(200, rows.length * 2)));
   const itemUseRate = Math.min(1, Math.max(0, num(config.buffModel.fullBuffItemUseRate, 0)));
+  const buffStartLevel = Math.max(1, Math.round(num(config.specialRules.buffStartLevel, 31)));
   const theoreticalRows = [];
 
   rows.forEach((row, idx) => {
@@ -245,8 +246,8 @@ function computeModel(config) {
     row.avg100 = avg100[idx];
     row.fullBuffProbability = fullBuffProbability[idx];
 
-    if (idx < 30) {
-      const fail0 = idx === 29 ? 1 : 0;
+    if (row.levelId < buffStartLevel) {
+      const fail0 = row.levelId === buffStartLevel - 1 ? 1 : 0;
       const buffCounts = [0, 0, 0, 0, 0, 0];
       theoreticalRows.push({ fail0, buffCounts });
       row.theoreticalZeroBuffRate = fail0;
@@ -280,7 +281,7 @@ function computeModel(config) {
     row.theoreticalFirstBuffDistribution = buffCounts.slice(1);
   });
 
-  const fullBuffFirstRates = rows.map((row, idx) => (idx < 30 ? null : (row.theoreticalFirstBuffDistribution?.[4] || 0)));
+  const fullBuffFirstRates = rows.map((row) => (row.levelId < buffStartLevel ? null : (row.theoreticalFirstBuffDistribution?.[4] || 0)));
   const fullBuffExpected10 = rollingSum(fullBuffFirstRates, 10);
   const fullBuffExpected20 = rollingSum(fullBuffFirstRates, 20);
   const fullBuffExpected50 = rollingSum(fullBuffFirstRates, 50);
@@ -303,7 +304,7 @@ function initEls() {
   [
     'dataSource','resetBtn','saveBtn','exportBtn','levelCount','growthFormulaNumerator','growthFormulaDenominator','cycleLength','cycleValues',
     'guideDifficulty','coinDifficulty','tailCapMax','tailCapWindow','tailCapEnabled','streakEnabled','streakExtraDefault','guideLevels',
-    'coinLevels','buffGrid','halfStepThreshold','integerThreshold','projectTitle','heroStats',
+    'coinLevels','buffStartLevel','buffGrid','halfStepThreshold','integerThreshold','projectTitle','heroStats',
     'focusStart','focusEnd','focusTable','overrideTable','curveCanvas','trendCanvas','buffExpectationCanvas','protocolWarning',
     'runtimeWarning','runtimeWarningText','showGrowth','showFinal','showTrendGrowth','showAvg10','showAvg20','showAvg50','showAvg100',
     'showBuffExpected10','showBuffExpected20','showBuffExpected50','showBuffExpected100',
@@ -362,6 +363,7 @@ function configToForm() {
   els.tailCapEnabled.checked = !!c.specialRules.tailCapEnabled;
   els.streakEnabled.checked = !!c.specialRules.streakEnabled;
   els.streakExtraDefault.value = c.specialRules.streakExtraDefault ?? 1.1;
+  els.buffStartLevel.value = c.specialRules.buffStartLevel ?? 31;
   els.guideLevels.value = (c.specialRules.guideLevels || []).join(', ');
   els.coinLevels.value = (c.specialRules.coinLevels || []).join(', ');
   els.halfStepThreshold.value = c.rounding.halfStepThreshold;
@@ -390,6 +392,7 @@ function updateConfigFromForm() {
   c.specialRules.tailCapEnabled = els.tailCapEnabled.checked;
   c.specialRules.streakEnabled = els.streakEnabled.checked;
   c.specialRules.streakExtraDefault = num(els.streakExtraDefault.value, c.specialRules.streakExtraDefault ?? 1.1);
+  c.specialRules.buffStartLevel = Math.max(1, Math.round(num(els.buffStartLevel.value, c.specialRules.buffStartLevel ?? 31)));
   c.specialRules.guideLevels = parseLevelList(els.guideLevels.value);
   c.specialRules.coinLevels = parseLevelList(els.coinLevels.value);
   c.rounding.halfStepThreshold = num(els.halfStepThreshold.value, c.rounding.halfStepThreshold);
@@ -901,7 +904,7 @@ function exportFocusTable() {
 function bindBaseInputs() {
   [
     'levelCount','growthFormulaNumerator','growthFormulaDenominator','cycleLength','guideDifficulty','coinDifficulty','tailCapMax',
-    'tailCapWindow','tailCapEnabled','streakEnabled','guideLevels','coinLevels','halfStepThreshold',
+    'tailCapWindow','tailCapEnabled','streakEnabled','buffStartLevel','guideLevels','coinLevels','halfStepThreshold',
     'integerThreshold','focusStart','focusEnd'
   ].forEach((id) => {
     if (!els[id]) return;
@@ -1051,6 +1054,7 @@ async function init() {
       tailCapMax: 2,
       streakEnabled: !!referenceSeed.modelSeed?.streakEnabled,
       streakExtraDefault: 1.1,
+      buffStartLevel: 31,
     },
     buffModel: {
       weights: referenceSeed.modelSeed?.buffWeights || defaultSeed.buffModel.weights,
@@ -1063,7 +1067,7 @@ async function init() {
   };
 
   state.seeds.default = defaultSeed;
-  state.seeds.default.specialRules = { ...state.seeds.default.specialRules, streakExtraDefault: 1.1 };
+  state.seeds.default.specialRules = { ...state.seeds.default.specialRules, streakExtraDefault: 1.1, buffStartLevel: 31 };
   state.config = cloneConfigForKey(state.currentKey);
   updateProtocolWarning();
   els.dataSource.value = state.currentKey;
