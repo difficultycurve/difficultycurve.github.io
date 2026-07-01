@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260701-04';
+const DATA_VERSION = '20260701-05';
 
 const state = {
   seeds: {},
@@ -1066,8 +1066,8 @@ async function init() {
       .map((item) => ({ levelId: item.levelId, difficulty: item.targetDifficulty })),
   };
 
-  state.seeds.default = defaultSeed;
-  state.seeds.default.specialRules = { ...state.seeds.default.specialRules, streakExtraDefault: 1.1, buffStartLevel: 31 };
+  state.seeds.default = deepClone(state.seeds.reference);
+  state.seeds.default.meta = { ...state.seeds.default.meta, projectName: 'SH01' };
   state.config = cloneConfigForKey(state.currentKey);
   updateProtocolWarning();
   els.dataSource.value = state.currentKey;
