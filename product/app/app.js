@@ -334,6 +334,14 @@ function initEls() {
   ].forEach((id) => { els[id] = $(id); });
 }
 
+function preventNumberArrowStep(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) return;
+  if (target.type !== "number") return;
+  if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+    event.preventDefault();
+  }
+}
 function savedConfigKey(key = state.currentKey) {
   return `${SAVED_CONFIG_PREFIX}${key}`;
 }
@@ -524,7 +532,6 @@ function getFocusRange() {
   let end = Math.max(1, Math.round(num(els.focusEnd.value, Math.min(total, start + 19))));
   start = Math.min(start, total);
   end = Math.min(end, total);
-  if (end < start) end = start;
   els.focusStart.value = start;
   els.focusEnd.value = end;
   return { start, end };
@@ -532,6 +539,7 @@ function getFocusRange() {
 
 function focusRowsData() {
   const range = getFocusRange();
+  if (range.start > range.end) return [];
   return state.result.rows.slice(range.start - 1, range.end);
 }
 
@@ -825,7 +833,6 @@ function renderBuffDistributionChart() {
 
 function renderTrendChart() {
   const rows = focusRowsData();
-  if (!rows.length) return;
   const seriesEntries = [
     { name: '近10关', data: rows.map((r) => r.avg10), color: '#cf4f67', lineWidth: 2, visible: state.trendVisibility.avg10, decimals: 2 },
     { name: '近20关', data: rows.map((r) => r.avg20), color: '#1769aa', lineWidth: 2, visible: state.trendVisibility.avg20, decimals: 2 },
@@ -839,7 +846,6 @@ function renderTrendChart() {
 function renderBuffExpectationChart() {
   if (!els.buffExpectationCanvas) return;
   const rows = focusRowsData();
-  if (!rows.length) return;
   const seriesEntries = [
     { name: '近10关', data: rows.map((r) => r.fullBuffExpected10), color: '#cf4f67', lineWidth: 2, visible: state.buffExpectationVisibility.exp10, decimals: 2 },
     { name: '近20关', data: rows.map((r) => r.fullBuffExpected20), color: '#1769aa', lineWidth: 2, visible: state.buffExpectationVisibility.exp20, decimals: 2 },
@@ -1047,6 +1053,7 @@ function updateProtocolWarning() {
 
 async function init() {
   initEls();
+  document.addEventListener("keydown", preventNumberArrowStep, true);
   const [referenceSeed, defaultSeed] = await Promise.all([
     loadJson('../../data/model_seed.json'),
     loadJson('../../data/project_seed_default.json'),
