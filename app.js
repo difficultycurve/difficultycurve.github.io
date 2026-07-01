@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260701-05';
+const DATA_VERSION = '20260701-06';
 
 const state = {
   seeds: {},
@@ -93,6 +93,18 @@ function evaluateGrowthFormula(formula, x) {
   if (!Number.isFinite(result)) throw new Error('基础增长公式结果无效。请检查公式写法，当前关卡：' + x);
   return result;
 }
+function parseOptionalPositiveNumber(value) {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const n = Number(text);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function applyGrowthCap(value, cap) {
+  const limit = parseOptionalPositiveNumber(cap);
+  return limit === null ? value : Math.min(value, limit);
+}
 function getCycleFactor(levelId, cycle) {
   const length = Math.max(1, Math.round(cycle.length));
   const values = cycle.values || [];
@@ -171,6 +183,7 @@ function computeModel(config) {
   const coinSet = levelSet(config.specialRules.coinLevels || []);
   const overrideMap = buildManualOverrideMap(config.manualOverrides || []);
   const weights = normalizeWeights(config.buffModel.weights || []);
+  const growthCap = config.growth?.cap;
   const decay = (config.buffModel.decay || []).map((v, idx) => {
     if (v === null || v === undefined || Number.isNaN(Number(v))) {
       return Math.max(0, 1 - idx * 0.08);
@@ -180,8 +193,11 @@ function computeModel(config) {
 
   const rows = [];
   for (let levelId = 1; levelId <= levelCount; levelId += 1) {
-    const baseGrowth = evaluateGrowthFormula(config.growth.formulaNumerator || buildGrowthFormula(config.growth), levelId);
-    const growth = evaluateGrowthFormula(buildGrowthFormula(config.growth), levelId);
+    const baseGrowth = applyGrowthCap(
+      evaluateGrowthFormula(config.growth.formulaNumerator || buildGrowthFormula(config.growth), levelId),
+      growthCap,
+    );
+    const growth = applyGrowthCap(evaluateGrowthFormula(buildGrowthFormula(config.growth), levelId), growthCap);
     const cycleFactor = getCycleFactor(levelId, config.cycle);
     const cycleValue = growth * cycleFactor;
 
@@ -302,7 +318,7 @@ function $(id) {
 
 function initEls() {
   [
-    'dataSource','resetBtn','saveBtn','exportBtn','levelCount','growthFormulaNumerator','growthFormulaDenominator','cycleLength','cycleValues',
+    'dataSource','resetBtn','saveBtn','exportBtn','levelCount','growthFormulaNumerator','growthFormulaDenominator','growthCap','cycleLength','cycleValues',
     'guideDifficulty','coinDifficulty','tailCapMax','tailCapWindow','tailCapEnabled','streakEnabled','streakExtraDefault','guideLevels',
     'coinLevels','buffStartLevel','buffGrid','halfStepThreshold','integerThreshold','projectTitle','heroStats',
     'focusStart','focusEnd','focusTable','overrideTable','curveCanvas','trendCanvas','buffExpectationCanvas','protocolWarning',
@@ -355,6 +371,7 @@ function configToForm() {
   const growthParts = splitGrowthFormula(c.growth.formula);
   els.growthFormulaNumerator.value = c.growth.formulaNumerator ?? growthParts.numerator;
   els.growthFormulaDenominator.value = c.growth.formulaDenominator ?? growthParts.denominator;
+  els.growthCap.value = c.growth.cap ?? '';
   els.cycleLength.value = c.cycle.length;
   els.guideDifficulty.value = c.specialRules.guideDifficulty;
   els.coinDifficulty.value = c.specialRules.coinDifficulty;
@@ -384,6 +401,7 @@ function updateConfigFromForm() {
   c.growth.formulaNumerator = els.growthFormulaNumerator.value.trim() || c.growth.formulaNumerator || '';
   c.growth.formulaDenominator = String(num(els.growthFormulaDenominator.value, num(c.growth.formulaDenominator, 1))).trim() || String(c.growth.formulaDenominator || 1);
   c.growth.formula = buildGrowthFormula(c.growth);
+  c.growth.cap = parseOptionalPositiveNumber(els.growthCap.value);
   c.cycle.length = Math.max(1, Math.round(num(els.cycleLength.value, c.cycle.length)));
   c.specialRules.guideDifficulty = num(els.guideDifficulty.value, c.specialRules.guideDifficulty);
   c.specialRules.coinDifficulty = num(els.coinDifficulty.value, c.specialRules.coinDifficulty);
@@ -903,7 +921,7 @@ function exportFocusTable() {
 
 function bindBaseInputs() {
   [
-    'levelCount','growthFormulaNumerator','growthFormulaDenominator','cycleLength','guideDifficulty','coinDifficulty','tailCapMax',
+    'levelCount','growthFormulaNumerator','growthFormulaDenominator','growthCap','cycleLength','guideDifficulty','coinDifficulty','tailCapMax',
     'tailCapWindow','tailCapEnabled','streakEnabled','buffStartLevel','guideLevels','coinLevels','halfStepThreshold',
     'integerThreshold','focusStart','focusEnd'
   ].forEach((id) => {
@@ -1036,6 +1054,7 @@ async function init() {
     levelCount: 3000,
     growth: {
       formula: '((1.08 * ln(x + 78)) - 3.8) / 2',
+      cap: null,
     },
     rounding: referenceSeed.modelSeed?.rounding || defaultSeed.rounding,
     cycle: {
