@@ -458,9 +458,9 @@ function configToForm() {
   els.growthFormulaDenominator.value = c.growth.formulaDenominator ?? growthParts.denominator;
   els.growthCap.value = c.growth.cap ?? '';
   els.cycleLength.value = c.cycle.length;
-  if (els.difficultyPresentationMode) els.difficultyPresentationMode.value = presentation.mode || 'bare';
-  if (els.noItemCoeff) els.noItemCoeff.value = presentation.noItemCoeff ?? defaults.noItemCoeff;
-  if (els.comprehensiveCoeff) els.comprehensiveCoeff.value = presentation.comprehensiveCoeff ?? defaults.comprehensiveCoeff;
+  if (els.difficultyPresentationMode) els.difficultyPresentationMode.value = displayPresentation.mode || 'bare';
+  if (els.noItemCoeff) els.noItemCoeff.value = displayPresentation.noItemCoeff ?? defaults.noItemCoeff;
+  if (els.comprehensiveCoeff) els.comprehensiveCoeff.value = displayPresentation.comprehensiveCoeff ?? defaults.comprehensiveCoeff;
   els.guideDifficulty.value = c.specialRules.guideDifficulty;
   els.coinDifficulty.value = c.specialRules.coinDifficulty;
   els.tailCapMax.value = c.specialRules.tailCapMax;
@@ -494,6 +494,7 @@ function updateConfigFromForm() {
   c.growth.cap = parseOptionalPositiveNumber(els.growthCap.value);
   c.cycle.length = Math.max(1, Math.round(num(els.cycleLength.value, c.cycle.length)));
   c.difficultyPresentation = {
+    version: 1,
     mode: els.difficultyPresentationMode?.value || 'bare',
     noItemCoeff: parseOptionalPositiveNumber(els.noItemCoeff?.value),
     comprehensiveCoeff: parseOptionalPositiveNumber(els.comprehensiveCoeff?.value),
