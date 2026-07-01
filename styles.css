@@ -161,6 +161,19 @@ label {
   font-size: 13px;
 }
 
+.field-note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.growth-cap-field {
+  grid-column: 1 / -1;
+  align-content: start;
+  gap: 4px;
+  padding-top: 2px;
+}
+
 input,
 select,
 textarea,
