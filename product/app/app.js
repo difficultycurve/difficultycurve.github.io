@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260701-01';
+const DATA_VERSION = '20260701-02';
 
 const state = {
   seeds: {},
@@ -7,6 +7,7 @@ const state = {
   result: null,
   chartVisibility: { growth: true, final: true },
   trendVisibility: { growth: true, avg10: true, avg20: true, avg50: true, avg100: true },
+  buffExpectationVisibility: { exp10: true, exp20: true, exp50: true, exp100: true },
   buffVisibility: { buff1: true, buff2: true, buff3: true, buff4: true, buff5: true },
 };
 
@@ -121,6 +122,17 @@ function rollingAverage(values, windowSize) {
     if (i >= windowSize) sum -= values[i - windowSize];
     const size = Math.min(i + 1, windowSize);
     out[i] = sum / size;
+  }
+  return out;
+}
+
+function rollingSum(values, windowSize) {
+  const out = new Array(values.length).fill(null);
+  let sum = 0;
+  for (let i = 0; i < values.length; i += 1) {
+    sum += values[i];
+    if (i >= windowSize) sum -= values[i - windowSize];
+    out[i] = sum;
   }
   return out;
 }
@@ -264,6 +276,18 @@ function computeModel(config) {
     row.theoreticalFirstBuffDistribution = buffCounts.slice(1);
   });
 
+  const fullBuffFirstRates = rows.map((row) => row.theoreticalFirstBuffDistribution?.[4] || 0);
+  const fullBuffExpected10 = rollingSum(fullBuffFirstRates, 10);
+  const fullBuffExpected20 = rollingSum(fullBuffFirstRates, 20);
+  const fullBuffExpected50 = rollingSum(fullBuffFirstRates, 50);
+  const fullBuffExpected100 = rollingSum(fullBuffFirstRates, 100);
+  rows.forEach((row, idx) => {
+    row.fullBuffExpected10 = fullBuffExpected10[idx];
+    row.fullBuffExpected20 = fullBuffExpected20[idx];
+    row.fullBuffExpected50 = fullBuffExpected50[idx];
+    row.fullBuffExpected100 = fullBuffExpected100[idx];
+  });
+
   return { rows, avg10, avg20, avg50, avg100 };
 }
 
@@ -276,8 +300,9 @@ function initEls() {
     'dataSource','resetBtn','saveBtn','exportBtn','levelCount','growthFormulaNumerator','growthFormulaDenominator','cycleLength','cycleValues',
     'guideDifficulty','coinDifficulty','tailCapMax','tailCapWindow','tailCapEnabled','streakEnabled','streakExtraDefault','guideLevels',
     'coinLevels','buffGrid','halfStepThreshold','integerThreshold','projectTitle','heroStats',
-    'focusStart','focusEnd','focusTable','overrideTable','curveCanvas','trendCanvas','protocolWarning',
+    'focusStart','focusEnd','focusTable','overrideTable','curveCanvas','trendCanvas','buffExpectationCanvas','protocolWarning',
     'runtimeWarning','runtimeWarningText','showGrowth','showFinal','showTrendGrowth','showAvg10','showAvg20','showAvg50','showAvg100',
+    'showBuffExpected10','showBuffExpected20','showBuffExpected50','showBuffExpected100',
     'showBuff1','showBuff2','showBuff3','showBuff4','showBuff5','buffDistributionCanvas','exportFocusBtn','cycleAverageValue'
   ].forEach((id) => { els[id] = $(id); });
 }
@@ -778,8 +803,21 @@ function renderTrendChart() {
   drawLines(els.trendCanvas, seriesEntries, { levelIds: rows.map((r) => r.levelId) });
 }
 
+function renderBuffExpectationChart() {
+  if (!els.buffExpectationCanvas) return;
+  const rows = focusRowsData();
+  if (!rows.length) return;
+  const seriesEntries = [
+    { name: '近10关', data: rows.map((r) => r.fullBuffExpected10), color: '#cf4f67', lineWidth: 2, visible: state.buffExpectationVisibility.exp10, decimals: 2 },
+    { name: '近20关', data: rows.map((r) => r.fullBuffExpected20), color: '#1769aa', lineWidth: 2, visible: state.buffExpectationVisibility.exp20, decimals: 2 },
+    { name: '近50关', data: rows.map((r) => r.fullBuffExpected50), color: '#2f8f72', lineWidth: 2, visible: state.buffExpectationVisibility.exp50, decimals: 2 },
+    { name: '近100关', data: rows.map((r) => r.fullBuffExpected100), color: '#8a63d2', lineWidth: 2, visible: state.buffExpectationVisibility.exp100, decimals: 2 },
+  ];
+  drawLines(els.buffExpectationCanvas, seriesEntries, { levelIds: rows.map((r) => r.levelId), padding: { top: 20, right: 24, bottom: 42, left: 44 } });
+}
+
 function syncLegendState() {
-  ['showGrowth', 'showFinal', 'showTrendGrowth', 'showAvg10', 'showAvg20', 'showAvg50', 'showAvg100', 'showBuff1', 'showBuff2', 'showBuff3', 'showBuff4', 'showBuff5'].forEach((id) => {
+  ['showGrowth', 'showFinal', 'showTrendGrowth', 'showAvg10', 'showAvg20', 'showAvg50', 'showAvg100', 'showBuffExpected10', 'showBuffExpected20', 'showBuffExpected50', 'showBuffExpected100', 'showBuff1', 'showBuff2', 'showBuff3', 'showBuff4', 'showBuff5'].forEach((id) => {
     const input = els[id];
     if (!input) return;
     input.closest('.legend-toggle')?.classList.toggle('off', !input.checked);
@@ -807,6 +845,7 @@ function recompute() {
     renderChart();
     renderBuffDistributionChart();
     renderTrendChart();
+    renderBuffExpectationChart();
     syncLegendState();
     syncSpecialRuleControls();
     ['growthFormulaNumerator','growthFormulaDenominator'].forEach((id) => {
@@ -940,6 +979,20 @@ function bindBaseInputs() {
     });
   });
 
+  [
+    ['showBuffExpected10', 'exp10'],
+    ['showBuffExpected20', 'exp20'],
+    ['showBuffExpected50', 'exp50'],
+    ['showBuffExpected100', 'exp100'],
+  ].forEach(([id, key]) => {
+    if (!els[id]) return;
+    els[id].addEventListener('change', () => {
+      state.buffExpectationVisibility[key] = els[id].checked;
+      syncLegendState();
+      renderBuffExpectationChart();
+    });
+  });
+
   if (els.exportFocusBtn) els.exportFocusBtn.addEventListener('click', exportFocusTable);
 }
 
@@ -1013,6 +1066,7 @@ async function init() {
   setupChartTooltip(els.curveCanvas);
   setupChartTooltip(els.buffDistributionCanvas);
   setupChartTooltip(els.trendCanvas);
+  setupChartTooltip(els.buffExpectationCanvas);
   window.addEventListener('scroll', hideChartTooltip, true);
   window.addEventListener('blur', hideChartTooltip);
   document.addEventListener('mouseleave', hideChartTooltip);
