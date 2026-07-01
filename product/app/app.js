@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260701-09';
+const DATA_VERSION = '20260701-10';
 
 const state = {
   seeds: {},
@@ -236,7 +236,7 @@ function computeModel(config) {
     rows.push({
       levelId,
       growth: baseGrowth,
-      formulaGrowth: growth,
+      formulaGrowth: cappedNumerator,
       growthNumerator,
       cappedNumerator,
       growthDenominator,
@@ -824,7 +824,7 @@ function renderChart() {
   const rows = state.result.rows;
   const seriesEntries = [
     { key: 'final', name: '最终输出', data: rows.map((r) => r.finalDifficulty), color: '#2f8f72', visible: state.chartVisibility.final, lineWidth: 2.8, decimals: 1 },
-    { key: 'growth', name: '基础增长', data: rows.map((r) => r.growth), color: '#d7a300', visible: state.chartVisibility.growth, lineWidth: 2.2 },
+    { key: 'growth', name: '基础增长公式', data: rows.map((r) => r.formulaGrowth), color: '#d7a300', visible: state.chartVisibility.growth, lineWidth: 2.2 },
   ];
   drawLines(els.curveCanvas, seriesEntries, { levelIds: rows.map((r) => r.levelId) });
 }
@@ -841,7 +841,7 @@ function renderTrendChart() {
     { name: '近20关', data: rows.map((r) => r.avg20), color: '#1769aa', lineWidth: 2, visible: state.trendVisibility.avg20, decimals: 2 },
     { name: '近50关', data: rows.map((r) => r.avg50), color: '#2f8f72', lineWidth: 2, visible: state.trendVisibility.avg50, decimals: 2 },
     { name: '近100关', data: rows.map((r) => r.avg100), color: '#8a63d2', lineWidth: 2, visible: state.trendVisibility.avg100, decimals: 2 },
-    { name: '基础增长曲线', data: rows.map((r) => r.growth), color: '#d7a300', lineWidth: 2.2, visible: state.trendVisibility.growth, decimals: 2 },
+    { name: '基础增长公式曲线', data: rows.map((r) => r.formulaGrowth), color: '#d7a300', lineWidth: 2.2, visible: state.trendVisibility.growth, decimals: 2 },
   ];
   drawLines(els.trendCanvas, seriesEntries, { levelIds: rows.map((r) => r.levelId) });
 }
@@ -907,7 +907,7 @@ function recompute() {
 function exportFocusTable() {
   const rows = focusRowsData();
   const range = getFocusRange();
-  const header = ['\u5173\u5361', '\u57fa\u7840\u589e\u957f', '\u5468\u671f\u4fee\u6b63', '\u7279\u6b8a\u5173\u4fee\u6b63', '\u6700\u7ec8\u96be\u5ea6', '\u8fd110\u5173', '\u8fd120\u5173', '\u8fd150\u5173', '\u8fd1100\u5173', '\u9996\u8f930buff\u7387', '\u9996\u95ef1\u7ea7buff\u7387', '\u9996\u95ef2\u7ea7buff\u7387', '\u9996\u95ef3\u7ea7buff\u7387', '\u9996\u95ef4\u7ea7buff\u7387', '\u9996\u95ef5\u7ea7buff\u7387'];
+  const header = ['\u5173\u5361', '\u57fa\u7840\u589e\u957f\u503c', '\u5468\u671f\u4fee\u6b63', '\u7279\u6b8a\u5173\u4fee\u6b63', '\u6700\u7ec8\u96be\u5ea6', '\u8fd110\u5173', '\u8fd120\u5173', '\u8fd150\u5173', '\u8fd1100\u5173', '\u9996\u8f930buff\u7387', '\u9996\u95ef1\u7ea7buff\u7387', '\u9996\u95ef2\u7ea7buff\u7387', '\u9996\u95ef3\u7ea7buff\u7387', '\u9996\u95ef4\u7ea7buff\u7387', '\u9996\u95ef5\u7ea7buff\u7387'];
   const lines = [header.join(',')].concat(rows.map((row) => [
     row.levelId,
     row.growth.toFixed(2),
