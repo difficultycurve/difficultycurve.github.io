@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260701-12';
+const DATA_VERSION = '20260701-13';
 
 const state = {
   seeds: {},
@@ -150,8 +150,8 @@ function getDifficultyPresentationSummary(config) {
 function syncDifficultyPresentationControls() {
   const presentation = getDifficultyPresentation(state.config);
   if (els.difficultyPresentationMode) els.difficultyPresentationMode.value = presentation.mode;
-  if (els.noItemCoeff) els.noItemCoeff.disabled = presentation.mode !== 'noItem';
-  if (els.comprehensiveCoeff) els.comprehensiveCoeff.disabled = presentation.mode !== 'comprehensive';
+  if (els.noItemCoeff) els.noItemCoeff.disabled = false;
+  if (els.comprehensiveCoeff) els.comprehensiveCoeff.disabled = false;
 }
 
 function refreshDifficultyPresentationCopy() {
