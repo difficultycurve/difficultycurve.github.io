@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260630-07';
+const DATA_VERSION = '20260701-01';
 
 const state = {
   seeds: {},
@@ -240,8 +240,8 @@ function computeModel(config) {
     }
 
     const prev = theoreticalRows[idx - 1] || { fail0: 1, buffCounts: [1, 0, 0, 0, 0, 0] };
-    const prevDifficulty = rows[idx - 1]?.adjusted ?? row.adjusted;
-    const currentDifficulty = row.adjusted;
+    const prevDifficulty = rows[idx - 1]?.finalDifficulty ?? row.finalDifficulty;
+    const currentDifficulty = row.finalDifficulty;
     const prevPass = decay.map((coeff, buffIndex) => passProbability(prevDifficulty, coeff, buffIndex === 5 ? itemUseRate : 0));
     const currentPass = decay.map((coeff, buffIndex) => passProbability(currentDifficulty, coeff, buffIndex === 5 ? itemUseRate : 0));
     const buffCounts = [
