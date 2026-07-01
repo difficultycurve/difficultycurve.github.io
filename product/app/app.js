@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260701-10';
+const DATA_VERSION = '20260701-12';
 
 const state = {
   seeds: {},
@@ -93,6 +93,7 @@ function evaluateGrowthFormula(formula, x) {
   if (!Number.isFinite(result)) throw new Error('基础增长公式结果无效。请检查公式写法，当前关卡：' + x);
   return result;
 }
+
 function parseOptionalPositiveNumber(value) {
   if (value === null || value === undefined) return null;
   const text = String(value).trim();
@@ -105,6 +106,60 @@ function applyGrowthCap(value, cap) {
   const limit = parseOptionalPositiveNumber(cap);
   return limit === null ? value : Math.min(value, limit);
 }
+
+function getDifficultyPresentation(config) {
+  const presentation = config?.difficultyPresentation || {};
+  const mode = presentation.mode || 'bare';
+  const coeff = mode === 'noItem'
+    ? num(presentation.noItemCoeff, NaN)
+    : mode === 'comprehensive'
+      ? num(presentation.comprehensiveCoeff, NaN)
+      : NaN;
+  if (mode === 'bare' || !Number.isFinite(coeff) || coeff <= 0) {
+    return { mode: 'bare', coeff: null };
+  }
+  return { mode, coeff };
+}
+
+function getDifficultyPresentationLabel(mode) {
+  if (mode === 'noItem') return '无道具难度';
+  if (mode === 'comprehensive') return '综合难度';
+  return '裸打难度';
+}
+
+function resolveDisplayedDifficulty(bareDifficulty, config) {
+  const presentation = getDifficultyPresentation(config);
+  if (presentation.mode === 'bare') return bareDifficulty;
+  const converted = 1 + ((bareDifficulty - 1) / presentation.coeff);
+  return applyRounding(converted, config.rounding);
+}
+
+function getDifficultyPresentationSummary(config) {
+  const presentation = getDifficultyPresentation(config);
+  const label = getDifficultyPresentationLabel(presentation.mode);
+  if (presentation.mode === 'bare') return { ...presentation, label, summary: label };
+  const coeffKey = presentation.mode === 'noItem' ? 'a' : 'b';
+  return {
+    ...presentation,
+    label,
+    coeffKey,
+    summary: `${label}（${coeffKey}=${presentation.coeff.toFixed(2)}）`,
+  };
+}
+
+function syncDifficultyPresentationControls() {
+  const presentation = getDifficultyPresentation(state.config);
+  if (els.difficultyPresentationMode) els.difficultyPresentationMode.value = presentation.mode;
+  if (els.noItemCoeff) els.noItemCoeff.disabled = presentation.mode !== 'noItem';
+  if (els.comprehensiveCoeff) els.comprehensiveCoeff.disabled = presentation.mode !== 'comprehensive';
+}
+
+function refreshDifficultyPresentationCopy() {
+  const summary = getDifficultyPresentationSummary(state.config);
+  if (els.finalDifficultyHeader) els.finalDifficultyHeader.textContent = summary.label;
+  if (els.finalDifficultyLegendText) els.finalDifficultyLegendText.textContent = summary.label;
+}
+
 function getCycleFactor(levelId, cycle) {
   const length = Math.max(1, Math.round(cycle.length));
   const values = cycle.values || [];
@@ -231,7 +286,8 @@ function computeModel(config) {
       return sum + (((adjusted - 1) * coeff) + 1) * weight;
     }, 0));
 
-    const finalDifficulty = applyRounding(adjusted, config.rounding);
+        const bareDifficulty = applyRounding(adjusted, config.rounding);
+    const finalDifficulty = resolveDisplayedDifficulty(bareDifficulty, config);
 
     rows.push({
       levelId,
@@ -244,12 +300,12 @@ function computeModel(config) {
       cycleValue,
       adjusted,
       buffed,
+      bareDifficulty,
       finalDifficulty,
       isGuide: guideSet.has(levelId),
       isCoin: coinSet.has(levelId),
     });
   }
-
   const finalSeries = rows.map((row) => row.finalDifficulty);
   const avg10 = rollingAverage(finalSeries, 10);
   const avg20 = rollingAverage(finalSeries, 20);
@@ -325,12 +381,14 @@ function $(id) {
 function initEls() {
   [
     'dataSource','resetBtn','saveBtn','exportBtn','levelCount','growthFormulaNumerator','growthFormulaDenominator','growthCap','cycleLength','cycleValues',
+    'difficultyPresentationMode','noItemCoeff','comprehensiveCoeff',
     'guideDifficulty','coinDifficulty','tailCapMax','tailCapWindow','tailCapEnabled','streakEnabled','streakExtraDefault','guideLevels',
     'coinLevels','buffStartLevel','buffGrid','halfStepThreshold','integerThreshold','projectTitle','heroStats',
     'focusStart','focusEnd','focusTable','overrideTable','curveCanvas','trendCanvas','buffExpectationCanvas','protocolWarning',
     'runtimeWarning','runtimeWarningText','showGrowth','showFinal','showTrendGrowth','showAvg10','showAvg20','showAvg50','showAvg100',
     'showBuffExpected10','showBuffExpected20','showBuffExpected50','showBuffExpected100',
-    'showBuff1','showBuff2','showBuff3','showBuff4','showBuff5','buffDistributionCanvas','exportFocusBtn','cycleAverageValue'
+    'showBuff1','showBuff2','showBuff3','showBuff4','showBuff5','buffDistributionCanvas','exportFocusBtn','cycleAverageValue',
+    'finalDifficultyHeader','finalDifficultyLegendText'
   ].forEach((id) => { els[id] = $(id); });
 }
 
@@ -342,6 +400,7 @@ function preventNumberArrowStep(event) {
     event.preventDefault();
   }
 }
+
 function savedConfigKey(key = state.currentKey) {
   return `${SAVED_CONFIG_PREFIX}${key}`;
 }
@@ -379,14 +438,19 @@ function clearSavedConfig(key = state.currentKey) {
 function cloneConfigForKey(key) {
   return deepClone(loadSavedConfig(key) || state.seeds[key]);
 }
+
 function configToForm() {
   const c = state.config;
+  const presentation = c.difficultyPresentation || {};
   els.levelCount.value = c.levelCount;
   const growthParts = splitGrowthFormula(c.growth.formula);
   els.growthFormulaNumerator.value = c.growth.formulaNumerator ?? growthParts.numerator;
   els.growthFormulaDenominator.value = c.growth.formulaDenominator ?? growthParts.denominator;
   els.growthCap.value = c.growth.cap ?? '';
   els.cycleLength.value = c.cycle.length;
+  if (els.difficultyPresentationMode) els.difficultyPresentationMode.value = presentation.mode || 'bare';
+  if (els.noItemCoeff) els.noItemCoeff.value = presentation.noItemCoeff ?? '';
+  if (els.comprehensiveCoeff) els.comprehensiveCoeff.value = presentation.comprehensiveCoeff ?? '';
   els.guideDifficulty.value = c.specialRules.guideDifficulty;
   els.coinDifficulty.value = c.specialRules.coinDifficulty;
   els.tailCapMax.value = c.specialRules.tailCapMax;
@@ -403,6 +467,8 @@ function configToForm() {
   els.focusEnd.value = Math.min(c.levelCount, 2200);
   if (els.showGrowth) els.showGrowth.checked = !!state.chartVisibility.growth;
   if (els.showFinal) els.showFinal.checked = !!state.chartVisibility.final;
+  syncDifficultyPresentationControls();
+  refreshDifficultyPresentationCopy();
   syncLegendState();
   buildCycleValueInputs();
   buildBuffInputs();
@@ -417,6 +483,11 @@ function updateConfigFromForm() {
   c.growth.formula = buildGrowthFormula(c.growth);
   c.growth.cap = parseOptionalPositiveNumber(els.growthCap.value);
   c.cycle.length = Math.max(1, Math.round(num(els.cycleLength.value, c.cycle.length)));
+  c.difficultyPresentation = {
+    mode: els.difficultyPresentationMode?.value || 'bare',
+    noItemCoeff: parseOptionalPositiveNumber(els.noItemCoeff?.value),
+    comprehensiveCoeff: parseOptionalPositiveNumber(els.comprehensiveCoeff?.value),
+  };
   c.specialRules.guideDifficulty = num(els.guideDifficulty.value, c.specialRules.guideDifficulty);
   c.specialRules.coinDifficulty = num(els.coinDifficulty.value, c.specialRules.coinDifficulty);
   c.specialRules.tailCapMax = num(els.tailCapMax.value, c.specialRules.tailCapMax);
@@ -519,7 +590,9 @@ function renderHero() {
   const avg = finalSeries.reduce((a, b) => a + b, 0) / finalSeries.length;
   const max = Math.max(...finalSeries);
   const min = Math.min(...finalSeries);
+  const summary = getDifficultyPresentationSummary(state.config);
   els.heroStats.innerHTML = `
+    <span class="pill">当前口径 ${summary.summary}</span>
     <span class="pill">平均难度 ${avg.toFixed(2)}</span>
     <span class="pill">最低 ${min.toFixed(2)}</span>
     <span class="pill">最高 ${max.toFixed(2)}</span>
@@ -572,7 +645,6 @@ function renderFocusTable() {
     </tr>
   `).join('');
 }
-
 
 function drawBuffDistributionBars(canvas, rows) {
   if (!canvas) return;
@@ -678,7 +750,8 @@ function drawLines(canvas, seriesEntries, options = {}) {
   const levelIds = options.levelIds || Array.from({ length: pointCount }, (_, idx) => idx + 1);
 
   function x(i) { return padding.left + (i / Math.max(1, pointCount - 1)) * usableW; }
-  function y(v) { return padding.top + usableH - ((v - min) / Math.max(0.001, max - min)) * usableH; }
+
+function y(v) { return padding.top + usableH - ((v - min) / Math.max(0.001, max - min)) * usableH; }
 
   ctx.strokeStyle = '#d7e0e8';
   ctx.lineWidth = 1;
@@ -822,8 +895,9 @@ function setupChartTooltip(canvas) {
 
 function renderChart() {
   const rows = state.result.rows;
+  const finalLabel = getDifficultyPresentationLabel(getDifficultyPresentation(state.config).mode);
   const seriesEntries = [
-    { key: 'final', name: '最终输出', data: rows.map((r) => r.finalDifficulty), color: '#2f8f72', visible: state.chartVisibility.final, lineWidth: 2.8, decimals: 1 },
+    { key: 'final', name: finalLabel, data: rows.map((r) => r.finalDifficulty), color: '#2f8f72', visible: state.chartVisibility.final, lineWidth: 2.8, decimals: 1 },
     { key: 'growth', name: '基础增长公式', data: rows.map((r) => r.formulaGrowth), color: '#d7a300', visible: state.chartVisibility.growth, lineWidth: 2.2 },
   ];
   drawLines(els.curveCanvas, seriesEntries, { levelIds: rows.map((r) => r.levelId) });
@@ -882,6 +956,7 @@ function recompute() {
     updateConfigFromForm();
     state.result = computeModel(state.config);
     hideRuntimeWarning();
+    refreshDifficultyPresentationCopy();
     renderHero();
     renderFocusTable();
     renderChart();
@@ -890,6 +965,7 @@ function recompute() {
     renderBuffExpectationChart();
     syncLegendState();
     syncSpecialRuleControls();
+    syncDifficultyPresentationControls();
     ['growthFormulaNumerator','growthFormulaDenominator'].forEach((id) => {
       if (els[id]) els[id].style.borderColor = '';
     });
@@ -903,11 +979,11 @@ function recompute() {
   }
 }
 
-
 function exportFocusTable() {
   const rows = focusRowsData();
   const range = getFocusRange();
-  const header = ['\u5173\u5361', '\u57fa\u7840\u589e\u957f\u503c', '\u5468\u671f\u4fee\u6b63', '\u7279\u6b8a\u5173\u4fee\u6b63', '\u6700\u7ec8\u96be\u5ea6', '\u8fd110\u5173', '\u8fd120\u5173', '\u8fd150\u5173', '\u8fd1100\u5173', '\u9996\u8f930buff\u7387', '\u9996\u95ef1\u7ea7buff\u7387', '\u9996\u95ef2\u7ea7buff\u7387', '\u9996\u95ef3\u7ea7buff\u7387', '\u9996\u95ef4\u7ea7buff\u7387', '\u9996\u95ef5\u7ea7buff\u7387'];
+  const finalLabel = getDifficultyPresentationLabel(getDifficultyPresentation(state.config).mode);
+  const header = ['关卡', '基础增长值', '周期修正', '特殊关修正', finalLabel, '近10关', '近20关', '近50关', '近100关', '首输0buff率', '首闯1级buff率', '首闯2级buff率', '首闯3级buff率', '首闯4级buff率', '首闯5级buff率'];
   const lines = [header.join(',')].concat(rows.map((row) => [
     row.levelId,
     row.growth.toFixed(2),
@@ -940,12 +1016,12 @@ function exportFocusTable() {
 
 function bindBaseInputs() {
   [
-    'levelCount','growthFormulaNumerator','growthFormulaDenominator','growthCap','cycleLength','guideDifficulty','coinDifficulty','tailCapMax',
-    'tailCapWindow','tailCapEnabled','streakEnabled','buffStartLevel','guideLevels','coinLevels','halfStepThreshold',
+    'levelCount','growthFormulaNumerator','growthFormulaDenominator','growthCap','cycleLength','difficultyPresentationMode','noItemCoeff','comprehensiveCoeff',
+    'guideDifficulty','coinDifficulty','tailCapMax','tailCapWindow','tailCapEnabled','streakEnabled','buffStartLevel','guideLevels','coinLevels','halfStepThreshold',
     'integerThreshold','focusStart','focusEnd'
   ].forEach((id) => {
     if (!els[id]) return;
-    els[id].addEventListener('input', () => {
+    const handler = () => {
       if (id === 'cycleLength') buildCycleValueInputs();
       if (id === 'streakEnabled') {
         if (els.streakEnabled.checked && num(els.streakExtraDefault?.value, 1) === 1) {
@@ -953,8 +1029,12 @@ function bindBaseInputs() {
         }
         syncSpecialRuleControls();
       }
+      if (id === 'difficultyPresentationMode' || id === 'noItemCoeff' || id === 'comprehensiveCoeff') {
+        syncDifficultyPresentationControls();
+      }
       recompute();
-    });
+    };
+    els[id].addEventListener(id === 'difficultyPresentationMode' ? 'change' : 'input', handler);
   });
 
   if (els.dataSource) els.dataSource.addEventListener('change', () => {

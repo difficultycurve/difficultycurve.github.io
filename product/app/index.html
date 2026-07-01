@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>难度曲线动态计算器</title>
-  <link rel="stylesheet" href="./styles.css?v=20260701-10" />
+  <link rel="stylesheet" href="./styles.css?v=20260701-12" />
 </head>
 <body>
   <div class="app-shell">
@@ -89,7 +89,24 @@
         <label>金币关列表<textarea id="coinLevels" rows="2"></textarea></label>
       </section>
 
-      <section class="panel">
+            <section class="panel">
+        <h2>难度口径</h2>
+        <div class="grid two">
+          <label class="growth-cap-field">
+            <span>页面展示口径</span>
+            <select id="difficultyPresentationMode">
+              <option value="bare">裸打难度</option>
+              <option value="noItem">无道具难度</option>
+              <option value="comprehensive">综合难度</option>
+            </select>
+            <span class="field-note">不配置时默认只展示裸打难度。</span>
+          </label>
+          <label>无道具系数 a<input id="noItemCoeff" type="number" min="0.01" step="0.01" placeholder="1.00" /></label>
+          <label>综合系数 b<input id="comprehensiveCoeff" type="number" min="0.01" step="0.01" placeholder="1.00" /></label>
+        </div>
+        <p class="field-note">裸打-1 ≈ a ×（无道具-1）；裸打-1 ≈ b ×（综合-1）。选了哪种口径，页面里的最终难度、图表和导出就一起按哪种口径走。</p>
+      </section>
+<section class="panel">
         <h2>Buff 模型</h2>
         <label>&#24320;&#21551;&#36830;&#32988;buff&#31561;&#32423;<input id="buffStartLevel" type="number" min="1" step="1" value="31" /></label>
         <div class="buff-grid" id="buffGrid"></div>
@@ -142,7 +159,7 @@
           <h2>曲线总览</h2>
           <div class="legend" id="curveLegend">
             <label class="legend-toggle"><input id="showGrowth" type="checkbox" checked /><span class="swatch growth"></span><span>基础增长公式</span></label>
-            <label class="legend-toggle"><input id="showFinal" type="checkbox" checked /><span class="swatch final"></span><span>最终输出</span></label>
+            <label class="legend-toggle"><input id="showFinal" type="checkbox" checked /><span class="swatch final"></span><span id="finalDifficultyLegendText">最终输出</span></label>
           </div>
         </div>
         <p class="muted section-help">基础增长公式：只看左侧“基础增长公式（x代表关卡id）”的底盘走势（封顶后）；最终输出：再经过基础增长值、特殊关、前 50 关手调和取整规则后的最终难度，对应 Excel 的最终曲线结果。</p>
@@ -178,7 +195,7 @@
                 <th>基础增长值</th>
                 <th>周期修正</th>
                 <th>特殊关修正</th>
-                <th>最终难度</th>
+                <th id="finalDifficultyHeader">最终难度</th>
                 <th>近10关</th>
                 <th>近20关</th>
                 <th>近50关</th>

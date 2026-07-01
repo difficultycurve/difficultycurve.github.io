@@ -210,6 +210,13 @@ textarea:focus {
   outline: 2px solid rgba(23, 105, 170, 0.18);
   border-color: var(--accent);
 }
+input:disabled,
+select:disabled,
+textarea:disabled,
+button:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
 
 button {
   min-height: 38px;
