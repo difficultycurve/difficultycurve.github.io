@@ -119,17 +119,14 @@ function getDifficultyPresentation(config) {
   const presentation = config?.difficultyPresentation || {};
   const defaults = getDefaultDifficultyPresentation(config?.meta?.projectName);
   const mode = presentation.mode || 'bare';
-  const coeff = mode === 'noItem'
-    ? num(presentation.noItemCoeff, defaults.noItemCoeff)
-    : mode === 'comprehensive'
-      ? num(presentation.comprehensiveCoeff, defaults.comprehensiveCoeff)
-      : NaN;
-  if (mode === 'bare' || !Number.isFinite(coeff) || coeff <= 0) {
+  if (mode === 'bare') {
     return { mode: 'bare', coeff: null, defaults };
   }
+  const rawCoeff = mode === 'noItem' ? presentation.noItemCoeff : presentation.comprehensiveCoeff;
+  const coeff = parseOptionalPositiveNumber(rawCoeff)
+    ?? (mode === 'noItem' ? defaults.noItemCoeff : defaults.comprehensiveCoeff);
   return { mode, coeff, defaults };
 }
-
 function getDifficultyPresentationLabel(mode) {
   if (mode === 'noItem') return '无道具难度';
   if (mode === 'comprehensive') return '综合难度';
@@ -458,9 +455,9 @@ function configToForm() {
   els.growthFormulaDenominator.value = c.growth.formulaDenominator ?? growthParts.denominator;
   els.growthCap.value = c.growth.cap ?? '';
   els.cycleLength.value = c.cycle.length;
-  if (els.difficultyPresentationMode) els.difficultyPresentationMode.value = displayPresentation.mode || 'bare';
-  if (els.noItemCoeff) els.noItemCoeff.value = displayPresentation.noItemCoeff ?? defaults.noItemCoeff;
-  if (els.comprehensiveCoeff) els.comprehensiveCoeff.value = displayPresentation.comprehensiveCoeff ?? defaults.comprehensiveCoeff;
+  if (els.difficultyPresentationMode) els.difficultyPresentationMode.value = presentation.mode || 'bare';
+  if (els.noItemCoeff) els.noItemCoeff.value = presentation.noItemCoeff ?? defaults.noItemCoeff;
+  if (els.comprehensiveCoeff) els.comprehensiveCoeff.value = presentation.comprehensiveCoeff ?? defaults.comprehensiveCoeff;
   els.guideDifficulty.value = c.specialRules.guideDifficulty;
   els.coinDifficulty.value = c.specialRules.coinDifficulty;
   els.tailCapMax.value = c.specialRules.tailCapMax;
