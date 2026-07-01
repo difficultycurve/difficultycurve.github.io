@@ -193,11 +193,14 @@ function computeModel(config) {
 
   const rows = [];
   for (let levelId = 1; levelId <= levelCount; levelId += 1) {
-    const baseGrowth = applyGrowthCap(
-      evaluateGrowthFormula(config.growth.formulaNumerator || buildGrowthFormula(config.growth), levelId),
-      growthCap,
+    const growthNumerator = evaluateGrowthFormula(
+      config.growth.formulaNumerator || buildGrowthFormula(config.growth),
+      levelId,
     );
-    const growth = applyGrowthCap(evaluateGrowthFormula(buildGrowthFormula(config.growth), levelId), growthCap);
+    const cappedNumerator = applyGrowthCap(growthNumerator, growthCap);
+    const growthDenominator = num(config.growth.formulaDenominator, 1) || 1;
+    const baseGrowth = cappedNumerator / growthDenominator;
+    const growth = baseGrowth;
     const cycleFactor = getCycleFactor(levelId, config.cycle);
     const cycleValue = growth * cycleFactor;
 
@@ -234,6 +237,9 @@ function computeModel(config) {
       levelId,
       growth: baseGrowth,
       formulaGrowth: growth,
+      growthNumerator,
+      cappedNumerator,
+      growthDenominator,
       cycleFactor,
       cycleValue,
       adjusted,
@@ -1105,3 +1111,4 @@ async function init() {
 init().catch((error) => {
   document.body.innerHTML = `<pre style="padding:24px;color:#b00020;white-space:pre-wrap;">初始化失败\n${error.message}</pre>`;
 });
+
