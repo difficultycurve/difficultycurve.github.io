@@ -33,10 +33,7 @@
       </div>
 
       <section class="panel">
-        <h2>基础增长</h2>
-        <div class="grid two">
-          <label>关卡总数<input id="levelCount" type="number" min="50" max="5000" step="10" /></label>
-        </div>
+        <h2>基础增长值计算方式</h2>
         <div class="formula-split">
           <label class="formula-part formula-numerator">
             <span>基础增长公式（x代表关卡id）</span>
@@ -58,9 +55,32 @@
       </section>
 
       <section class="panel">
+        <h2>难度口径</h2>
+        <div class="grid two">
+          <label class="growth-cap-field">
+            <span>页面展示口径</span>
+            <select id="difficultyPresentationMode">
+              <option value="bare">裸打难度</option>
+              <option value="noItem">无道具难度</option>
+              <option value="comprehensive">综合难度</option>
+            </select>
+          </label>
+          <label class="growth-cap-field">
+            <span>无道具系数 a</span>
+            <input id="noItemCoeff" type="number" min="0.01" step="0.01" placeholder="1.00" />
+            <span class="field-note">裸打-1~a......</span>
+          </label>
+          <label class="growth-cap-field">
+            <span>综合系数 b</span>
+            <input id="comprehensiveCoeff" type="number" min="0.01" step="0.01" placeholder="1.00" />
+            <span class="field-note">打-1~b......</span>
+          </label>
+        </div>
+      </section>
+
+      <section class="panel">
         <h2>50关小循环难度</h2>
         <div class="grid two cycle-summary">
-          <label>周期长度<input id="cycleLength" type="number" min="10" max="200" step="5" /></label>
           <div class="readonly-metric">
             <span>50关难度均值</span>
             <strong id="cycleAverageValue">-</strong>
@@ -82,7 +102,7 @@
         </div>
         <label class="switch"><input id="tailCapEnabled" type="checkbox" />启用尾号关封顶</label>
         <div class="grid two">
-          <label class="switch"><input id="streakEnabled" type="checkbox" />启用连胜额外系数</label>
+          <label class="switch"><input id="streakEnabled" type="checkbox" />启用连胜额外系数(暂时没用)</label>
           <label>连胜额外系数<input id="streakExtraDefault" type="number" min="0.1" step="0.05" /></label>
         </div>
         <label>引导关列表<textarea id="guideLevels" rows="3"></textarea></label>
@@ -268,6 +288,6 @@
     </main>
   </div>
 
-  <script src="./app.js?v=20260702-01"></script>
+  <script src="./app.js?v=20260702-02"></script>
 </body>
 </html>

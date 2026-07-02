@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>难度曲线动态计算器</title>
-  <link rel="stylesheet" href="./styles.css?v=20260701-12" />
+  <link rel="stylesheet" href="./styles.css?v=20260702-08" />
 </head>
 <body>
   <div class="app-shell">
     <aside class="sidebar">
       <div id="protocolWarning" class="panel warning" hidden>
-        <strong>当前是直接打开本地文件。</strong>
+        <strong>当前是直接打开本地文件</strong>
         <p>请改用本地服务地址打开，例如 <code>http://127.0.0.1:8765/product/app/index.html</code>，否则图表和动态结果可能不会加载。</p>
       </div>
 
@@ -33,10 +33,7 @@
       </div>
 
       <section class="panel">
-        <h2>基础增长值</h2>
-        <div class="grid two">
-          <label>关卡总数<input id="levelCount" type="number" min="50" max="5000" step="10" /></label>
-        </div>
+        <h2>基础增长值计算方式</h2>
         <div class="formula-split">
           <label class="formula-part formula-numerator">
             <span>基础增长公式（x代表关卡id）</span>
@@ -58,9 +55,27 @@
       </section>
 
       <section class="panel">
+        <h2>难度口径</h2>
+        <div class="grid two">
+          <label class="growth-cap-field">
+            <span>页面展示口径</span>
+            <select id="difficultyPresentationMode">
+              <option value="bare">裸打难度</option>
+              <option value="noItem">无道具难度</option>
+              <option value="comprehensive">综合难度</option>
+            </select>
+            
+          </label>
+          <label class="growth-cap-field">无道具系数 a<input id="noItemCoeff" type="number" min="0.01" step="0.01" placeholder="1.00" /><span class="field-note">裸打-1 ≈ a ×（无道具-1）</span></label>
+          <label class="growth-cap-field">综合系数 b<input id="comprehensiveCoeff" type="number" min="0.01" step="0.01" placeholder="1.00" /><span class="field-note">裸打-1 ≈ b ×（综合-1）</span></label>
+        </div>
+        
+      </section>
+
+      <section class="panel">
         <h2>50关小循环难度</h2>
         <div class="grid two cycle-summary">
-          <label>周期长度<input id="cycleLength" type="number" min="10" max="200" step="5" /></label>
+          
           <div class="readonly-metric">
             <span>50关难度均值</span>
             <strong id="cycleAverageValue">-</strong>
@@ -82,31 +97,13 @@
         </div>
         <label class="switch"><input id="tailCapEnabled" type="checkbox" />启用尾号关封顶</label>
         <div class="grid two">
-          <label class="switch"><input id="streakEnabled" type="checkbox" />启用连胜额外系数</label>
+          <label class="switch"><input id="streakEnabled" type="checkbox" />启用连胜额外系数（暂时没用）</label>
           <label>连胜额外系数<input id="streakExtraDefault" type="number" min="0.1" step="0.05" /></label>
         </div>
         <label>引导关列表<textarea id="guideLevels" rows="3"></textarea></label>
         <label>金币关列表<textarea id="coinLevels" rows="2"></textarea></label>
       </section>
-
-            <section class="panel">
-        <h2>难度口径</h2>
-        <div class="grid two">
-          <label class="growth-cap-field">
-            <span>页面展示口径</span>
-            <select id="difficultyPresentationMode">
-              <option value="bare">裸打难度</option>
-              <option value="noItem">无道具难度</option>
-              <option value="comprehensive">综合难度</option>
-            </select>
-            <span class="field-note">默认系数会按项目自动填充，旧配置也会自动补上。</span>
-          </label>
-          <label>无道具系数 a<input id="noItemCoeff" type="number" min="0.01" step="0.01" placeholder="1.00" /></label>
-          <label>综合系数 b<input id="comprehensiveCoeff" type="number" min="0.01" step="0.01" placeholder="1.00" /></label>
-        </div>
-        <p class="field-note">裸打-1 ≈ a ×（无道具-1）；裸打-1 ≈ b ×（综合-1）。页面会按项目名自动带出默认系数，旧配置也会自动补上。</p>
-      </section>
-<section class="panel">
+      <section class="panel">
         <h2>Buff 模型</h2>
         <label>&#24320;&#21551;&#36830;&#32988;buff&#31561;&#32423;<input id="buffStartLevel" type="number" min="1" step="1" value="31" /></label>
         <div class="buff-grid" id="buffGrid"></div>
@@ -120,9 +117,9 @@
           <li>特别取整规则：</li>
         </ol>
         <div class="rounding-grid">
-          <label>难度小于 x，难度不变<input id="halfStepThreshold" type="number" step="0.1" /></label>
+          <label>难度小于 x，难度不取整<input id="halfStepThreshold" type="number" step="0.1" /></label>
           <label>难度大于 y，难度取整<input id="integerThreshold" type="number" step="0.1" /></label>
-          <label class="static-rule">难度介于 x 与 y 之间，难度取整或 0.5</label>
+          <label class="static-rule">难度介于 x 和 y 之间，难度取整或 0.5</label>
         </div>
       </section>
     </aside>
@@ -142,11 +139,21 @@
       </section>
 
       <section class="hero">
-        <div>
+        <div class="hero-title">
           <p class="eyebrow">当前方案概览</p>
           <h2 id="projectTitle">项目调试面板</h2>
         </div>
-        <div class="hero-stats" id="heroStats"></div>
+        <div class="hero-side">
+          <div class="range-tools hero-range">
+            <label>起始关卡
+              <input id="focusStart" type="number" min="1" step="1" />
+            </label>
+            <label>结束关卡
+              <input id="focusEnd" type="number" min="1" step="1" />
+            </label>
+          </div>
+          <div class="hero-stats" id="heroStats"></div>
+        </div>
       </section>
 
       <section id="runtimeWarning" class="panel warning" hidden>
@@ -159,7 +166,7 @@
           <h2>曲线总览</h2>
           <div class="legend" id="curveLegend">
             <label class="legend-toggle"><input id="showGrowth" type="checkbox" checked /><span class="swatch growth"></span><span>基础增长公式</span></label>
-            <label class="legend-toggle"><input id="showFinal" type="checkbox" checked /><span class="swatch final"></span><span id="finalDifficultyLegendText">最终输出</span></label>
+            <label class="legend-toggle"><input id="showFinal" type="checkbox" checked /><span class="swatch final"></span><span id="finalDifficultyLegendText">最终难度</span></label>
           </div>
         </div>
         <p class="muted section-help">基础增长公式：只看左侧“基础增长公式（x代表关卡id）”的底盘走势（封顶后）；最终输出：再经过基础增长值、特殊关、前 50 关手调和取整规则后的最终难度，对应 Excel 的最终曲线结果。</p>
@@ -174,16 +181,10 @@
             <p class="muted section-help detail-help">
               <span>基础增长值：基础增长公式 / 50关均值后的难度；周期修正：叠加周期后的难度。</span>
               <span>特殊关修正：再经过引导关、金币关等规则修正后的难度；最终难度：按取整规则得到的最终结果。</span>
-              <span>近10关 / 近20关 / 近50关 / 近100关：从当前关往前看的滚动平均难度。</span>
+              <span>前10关 / 前20关 / 前50关 / 前100关：从当前关往前看的滚动平均难度。</span>
             </p>
           </div>
           <div class="range-tools">
-            <label>开始关
-              <input id="focusStart" type="number" min="1" step="1" />
-            </label>
-            <label>结束关
-              <input id="focusEnd" type="number" min="1" step="1" />
-            </label>
             <button id="exportFocusBtn" type="button" class="secondary">导出数据</button>
           </div>
         </div>
@@ -196,10 +197,10 @@
                 <th>周期修正</th>
                 <th>特殊关修正</th>
                 <th id="finalDifficultyHeader">最终难度</th>
-                <th>近10关</th>
-                <th>近20关</th>
-                <th>近50关</th>
-                <th>近100关</th>
+                <th>前10关</th>
+                <th>前20关</th>
+                <th>前50关</th>
+                <th>前100关</th>
                 <th>&#39318;&#36755;0buff&#29575;</th>
                 <th>&#39318;&#38383;1&#32423;buff&#29575;</th>
                 <th>&#39318;&#38383;2&#32423;buff&#29575;</th>
@@ -219,10 +220,10 @@
           <h2>趋势-近x关均难度</h2>
           <div class="legend compact-legend" id="trendLegend">
             <label class="legend-toggle"><input id="showTrendGrowth" type="checkbox" checked /><span class="swatch growth"></span><span>基础增长公式曲线</span></label>
-            <label class="legend-toggle"><input id="showAvg10" type="checkbox" checked /><span class="swatch avg10"></span><span>近10关</span></label>
-            <label class="legend-toggle"><input id="showAvg20" type="checkbox" checked /><span class="swatch avg20"></span><span>近20关</span></label>
-            <label class="legend-toggle"><input id="showAvg50" type="checkbox" checked /><span class="swatch avg50"></span><span>近50关</span></label>
-            <label class="legend-toggle"><input id="showAvg100" type="checkbox" checked /><span class="swatch avg100"></span><span>近100关</span></label>
+            <label class="legend-toggle"><input id="showAvg10" type="checkbox" checked /><span class="swatch avg10"></span><span>前10关</span></label>
+            <label class="legend-toggle"><input id="showAvg20" type="checkbox" checked /><span class="swatch avg20"></span><span>前20关</span></label>
+            <label class="legend-toggle"><input id="showAvg50" type="checkbox" checked /><span class="swatch avg50"></span><span>前50关</span></label>
+            <label class="legend-toggle"><input id="showAvg100" type="checkbox" checked /><span class="swatch avg100"></span><span>前100关</span></label>
           </div>
         </div>
         <p class="muted section-help">这里看的是当前所选区间内，滚动平均难度的变化趋势。它更适合判断一段内容是不是整体偏抬、偏压，或者中间有突然跳变。</p>
@@ -254,13 +255,13 @@
         <div class="section-head">
           <h2>趋势-近x关首闯满5级buff期望次数</h2>
           <div class="legend compact-legend" id="buffExpectationLegend">
-            <label class="legend-toggle"><input id="showBuffExpected10" type="checkbox" checked /><span class="swatch avg10"></span><span>近10关</span></label>
-            <label class="legend-toggle"><input id="showBuffExpected20" type="checkbox" checked /><span class="swatch avg20"></span><span>近20关</span></label>
-            <label class="legend-toggle"><input id="showBuffExpected50" type="checkbox" checked /><span class="swatch avg50"></span><span>近50关</span></label>
-            <label class="legend-toggle"><input id="showBuffExpected100" type="checkbox" checked /><span class="swatch avg100"></span><span>近100关</span></label>
+            <label class="legend-toggle"><input id="showBuffExpected10" type="checkbox" checked /><span class="swatch avg10"></span><span>前10关</span></label>
+            <label class="legend-toggle"><input id="showBuffExpected20" type="checkbox" checked /><span class="swatch avg20"></span><span>前20关</span></label>
+            <label class="legend-toggle"><input id="showBuffExpected50" type="checkbox" checked /><span class="swatch avg50"></span><span>前50关</span></label>
+            <label class="legend-toggle"><input id="showBuffExpected100" type="checkbox" checked /><span class="swatch avg100"></span><span>前100关</span></label>
           </div>
         </div>
-        <p class="muted section-help">这里把每关的首闯5级buff率按当前关向前滚动求和，表示该关及其前x关里，进关时带5级buff的数学期望次数。</p>
+        <p class="muted section-help">这里把每关的首闯5级buff率按当前关向前滚动求和，表示该关及其前x关里，进关时5级buff的数学期望次数。</p>
         <div class="chart-wrap">
           <canvas id="buffExpectationCanvas" width="1200" height="320"></canvas>
         </div>
@@ -269,8 +270,8 @@
 
       <section class="panel">
         <div class="section-head">
-          <h2>前 50 关人工微调</h2>
-          <p class="muted manual-tune-note">这里保留参考模型的前期手调习惯，适合按项目体感局部压或抬。</p>
+          <h2>前50 关人工微调</h2>
+          <p class="muted manual-tune-note">这里保留参考模型的前期手调习惯，适合按项目体感局部压或抬升。</p>
         </div>
         <div class="override-scroll compact-table">
           <div class="override-grid-head">
@@ -285,7 +286,7 @@
     </main>
   </div>
 
-  <script src="./app.js?v=20260701-21"></script>
+  <script src="./app.js?v=20260702-08"></script>
 </body>
 </html>
 

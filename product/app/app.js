@@ -107,6 +107,16 @@ function applyGrowthCap(value, cap) {
   return limit === null ? value : Math.min(value, limit);
 }
 
+function getDisplayRange(config) {
+  const total = Math.max(1, Math.round(num(config?.levelCount, 3000)));
+  const source = config?.displayRange || {};
+  let startLevel = Math.max(1, Math.round(num(source.startLevel, 1)));
+  let endLevel = Math.max(startLevel, Math.round(num(source.endLevel, total)));
+  if (startLevel > total) startLevel = total;
+  endLevel = Math.min(total, Math.max(startLevel, endLevel));
+  return { startLevel, endLevel, total };
+}
+
 function getDefaultDifficultyPresentation(projectName) {
   const isSh01 = String(projectName || '').toUpperCase() === 'SH01';
   return {
@@ -149,7 +159,7 @@ function getDifficultyPresentationSummary(config) {
     ...presentation,
     label,
     coeffKey,
-    summary: `${label}（${coeffKey}=${presentation.coeff.toFixed(2)}）`,
+    summary: `${label}，${coeffKey}=${presentation.coeff.toFixed(2)}`, 
   };
 }
 
@@ -416,7 +426,7 @@ function loadSavedConfig(key) {
     const raw = localStorage.getItem(savedConfigKey(key));
     return raw ? JSON.parse(raw) : null;
   } catch (error) {
-    console.warn('读取本地保存配置失败。', error);
+    console.warn('读取本地保存配置失败', error);
     return null;
   }
 }
@@ -449,12 +459,12 @@ function configToForm() {
   const c = state.config;
   const defaults = getDefaultDifficultyPresentation(c.meta?.projectName);
   const presentation = c.difficultyPresentation || defaults;
-  els.levelCount.value = c.levelCount;
+  if (els.levelCount) els.levelCount.value = c.levelCount;
   const growthParts = splitGrowthFormula(c.growth.formula);
   els.growthFormulaNumerator.value = c.growth.formulaNumerator ?? growthParts.numerator;
   els.growthFormulaDenominator.value = c.growth.formulaDenominator ?? growthParts.denominator;
   els.growthCap.value = c.growth.cap ?? '';
-  els.cycleLength.value = c.cycle.length;
+  if (els.cycleLength) els.cycleLength.value = c.cycle.length;
   if (els.difficultyPresentationMode) els.difficultyPresentationMode.value = presentation.mode || 'bare';
   if (els.noItemCoeff) els.noItemCoeff.value = presentation.noItemCoeff ?? defaults.noItemCoeff;
   if (els.comprehensiveCoeff) els.comprehensiveCoeff.value = presentation.comprehensiveCoeff ?? defaults.comprehensiveCoeff;
@@ -470,8 +480,9 @@ function configToForm() {
   els.coinLevels.value = (c.specialRules.coinLevels || []).join(', ');
   els.halfStepThreshold.value = c.rounding.halfStepThreshold;
   els.integerThreshold.value = c.rounding.integerThreshold;
-  els.focusStart.value = 1;
-  els.focusEnd.value = Math.min(c.levelCount, 2200);
+  const displayRange = getDisplayRange(c);
+  if (els.focusStart) els.focusStart.value = displayRange.startLevel;
+  if (els.focusEnd) els.focusEnd.value = displayRange.endLevel;
   if (els.showGrowth) els.showGrowth.checked = !!state.chartVisibility.growth;
   if (els.showFinal) els.showFinal.checked = !!state.chartVisibility.final;
   syncDifficultyPresentationControls();
@@ -484,12 +495,10 @@ function configToForm() {
 
 function updateConfigFromForm() {
   const c = state.config;
-  c.levelCount = Math.round(num(els.levelCount.value, c.levelCount));
   c.growth.formulaNumerator = els.growthFormulaNumerator.value.trim() || c.growth.formulaNumerator || '';
   c.growth.formulaDenominator = String(num(els.growthFormulaDenominator.value, num(c.growth.formulaDenominator, 1))).trim() || String(c.growth.formulaDenominator || 1);
   c.growth.formula = buildGrowthFormula(c.growth);
   c.growth.cap = parseOptionalPositiveNumber(els.growthCap.value);
-  c.cycle.length = Math.max(1, Math.round(num(els.cycleLength.value, c.cycle.length)));
   c.difficultyPresentation = {
     version: 1,
     mode: els.difficultyPresentationMode?.value || 'bare',
@@ -509,6 +518,10 @@ function updateConfigFromForm() {
   c.rounding.halfStepThreshold = num(els.halfStepThreshold.value, c.rounding.halfStepThreshold);
   c.rounding.integerThreshold = num(els.integerThreshold.value, c.rounding.integerThreshold);
   c.rounding.halfStep = num(c.rounding.halfStep, 0.5);
+  const totalLevels = Math.max(1, Math.round(num(c.levelCount, 3000)));
+  const startLevel = Math.min(totalLevels, Math.max(1, Math.round(num(els.focusStart?.value, 1))));
+  const endLevel = Math.min(totalLevels, Math.max(startLevel, Math.round(num(els.focusEnd?.value, totalLevels))));
+  c.displayRange = { startLevel, endLevel };
 }
 
 function updateCycleAverage() {
@@ -531,7 +544,7 @@ function buildCycleValueInputs() {
   els.cycleValues.innerHTML = '';
   values.forEach((value, idx) => {
     const label = document.createElement('label');
-    label.innerHTML = `第 ${idx + 1} 关<input type="number" step="0.1" value="${value}">`;
+    label.innerHTML = `第${idx + 1} 关<input type="number" step="0.1" value="${value}">`;
     const input = label.querySelector('input');
     input.addEventListener('input', () => {
       state.config.cycle.values[idx] = num(input.value, value);
@@ -550,7 +563,6 @@ function buildBuffInputs() {
     wrap.className = 'buff-item';
     wrap.innerHTML = `
       <h2>Buff ${i}</h2>
-      <label>占比<input data-kind="weight" data-index="${i}" type="number" step="0.01" value="${state.config.buffModel.weights[i] ?? 0}"></label>
       <label>难度系数<input data-kind="decay" data-index="${i}" type="number" step="0.01" value="${state.config.buffModel.decay[i] ?? 1}"></label>
     `;
     wrap.querySelectorAll('input').forEach((input) => {
@@ -573,7 +585,7 @@ function buildOverrideTable() {
     const item = document.createElement('label');
     item.className = 'override-item';
     const value = existing.has(levelId) ? existing.get(levelId) : '';
-    item.innerHTML = `<span>第 ${levelId} 关</span><input type="number" step="0.1" value="${value}" aria-label="第 ${levelId} 关难度">`;
+    item.innerHTML = `<span>第${levelId}关</span><input type="number" step="0.1" value="${value}" aria-label="第${levelId}关难度">`;
     const input = item.querySelector('input');
     input.addEventListener('input', () => {
       const idx = state.config.manualOverrides.findIndex((entry) => Math.round(num(entry.levelId, 0)) === levelId);
@@ -593,35 +605,27 @@ function buildOverrideTable() {
 
 function renderHero() {
   els.projectTitle.textContent = state.config.meta?.projectName || '项目调试面板';
-  const rows = state.result.rows;
-  const finalSeries = rows.map((r) => r.finalDifficulty);
+  const rows = focusRowsData();
+  const displayRows = rows.length ? rows : state.result.rows;
+  const finalSeries = displayRows.map((r) => r.finalDifficulty);
   const avg = finalSeries.reduce((a, b) => a + b, 0) / finalSeries.length;
   const max = Math.max(...finalSeries);
-  const min = Math.min(...finalSeries);
   const summary = getDifficultyPresentationSummary(state.config);
   els.heroStats.innerHTML = `
     <span class="pill">当前口径 ${summary.summary}</span>
     <span class="pill">平均难度 ${avg.toFixed(2)}</span>
-    <span class="pill">最低 ${min.toFixed(2)}</span>
-    <span class="pill">最高 ${max.toFixed(2)}</span>
+    <span class="pill">最大 ${max.toFixed(2)}</span>
   `;
 }
 
 function getFocusRange() {
-  const total = state.result.rows.length;
-  const rawStart = els.focusStart.value.trim();
-  const rawEnd = els.focusEnd.value.trim();
-  if (rawStart === '' || rawEnd === '') return null;
-  const start = Math.round(Number(rawStart));
-  const end = Math.round(Number(rawEnd));
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
-  if (start < 1 || end < 1) return null;
-  if (start > end) return null;
-  if (start > total) return null;
-  return { start, end };
+  if (!state.config) return null;
+  const { startLevel, endLevel } = getDisplayRange(state.config);
+  return { start: startLevel, end: endLevel };
 }
 
 function focusRowsData() {
+  if (!state.result) return [];
   const range = getFocusRange();
   if (!range) return [];
   return state.result.rows.slice(range.start - 1, range.end);
@@ -902,11 +906,11 @@ function setupChartTooltip(canvas) {
 }
 
 function renderChart() {
-  const rows = state.result.rows;
+  const rows = focusRowsData();
   const finalLabel = getDifficultyPresentationLabel(getDifficultyPresentation(state.config).mode);
   const seriesEntries = [
     { key: 'final', name: finalLabel, data: rows.map((r) => r.finalDifficulty), color: '#2f8f72', visible: state.chartVisibility.final, lineWidth: 2.8, decimals: 1 },
-    { key: 'growth', name: '基础增长公式', data: rows.map((r) => r.formulaGrowth), color: '#d7a300', visible: state.chartVisibility.growth, lineWidth: 2.2 },
+    { key: 'growth', name: '基础增长值', data: rows.map((r) => r.formulaGrowth), color: '#d7a300', visible: state.chartVisibility.growth, lineWidth: 2.2 },
   ];
   drawLines(els.curveCanvas, seriesEntries, { levelIds: rows.map((r) => r.levelId) });
 }
@@ -919,10 +923,10 @@ function renderBuffDistributionChart() {
 function renderTrendChart() {
   const rows = focusRowsData();
   const seriesEntries = [
-    { name: '近10关', data: rows.map((r) => r.avg10), color: '#cf4f67', lineWidth: 2, visible: state.trendVisibility.avg10, decimals: 2 },
-    { name: '近20关', data: rows.map((r) => r.avg20), color: '#1769aa', lineWidth: 2, visible: state.trendVisibility.avg20, decimals: 2 },
-    { name: '近50关', data: rows.map((r) => r.avg50), color: '#2f8f72', lineWidth: 2, visible: state.trendVisibility.avg50, decimals: 2 },
-    { name: '近100关', data: rows.map((r) => r.avg100), color: '#8a63d2', lineWidth: 2, visible: state.trendVisibility.avg100, decimals: 2 },
+    { name: '前10关', data: rows.map((r) => r.avg10), color: '#cf4f67', lineWidth: 2, visible: state.trendVisibility.avg10, decimals: 2 },
+    { name: '前20关', data: rows.map((r) => r.avg20), color: '#1769aa', lineWidth: 2, visible: state.trendVisibility.avg20, decimals: 2 },
+    { name: '前50关', data: rows.map((r) => r.avg50), color: '#2f8f72', lineWidth: 2, visible: state.trendVisibility.avg50, decimals: 2 },
+    { name: '前100关', data: rows.map((r) => r.avg100), color: '#8a63d2', lineWidth: 2, visible: state.trendVisibility.avg100, decimals: 2 },
     { name: '基础增长公式曲线', data: rows.map((r) => r.formulaGrowth), color: '#d7a300', lineWidth: 2.2, visible: state.trendVisibility.growth, decimals: 2 },
   ];
   drawLines(els.trendCanvas, seriesEntries, { levelIds: rows.map((r) => r.levelId) });
@@ -932,10 +936,10 @@ function renderBuffExpectationChart() {
   if (!els.buffExpectationCanvas) return;
   const rows = focusRowsData();
   const seriesEntries = [
-    { name: '近10关', data: rows.map((r) => r.fullBuffExpected10), color: '#cf4f67', lineWidth: 2, visible: state.buffExpectationVisibility.exp10, decimals: 2 },
-    { name: '近20关', data: rows.map((r) => r.fullBuffExpected20), color: '#1769aa', lineWidth: 2, visible: state.buffExpectationVisibility.exp20, decimals: 2 },
-    { name: '近50关', data: rows.map((r) => r.fullBuffExpected50), color: '#2f8f72', lineWidth: 2, visible: state.buffExpectationVisibility.exp50, decimals: 2 },
-    { name: '近100关', data: rows.map((r) => r.fullBuffExpected100), color: '#8a63d2', lineWidth: 2, visible: state.buffExpectationVisibility.exp100, decimals: 2 },
+    { name: '前10关', data: rows.map((r) => r.fullBuffExpected10), color: '#cf4f67', lineWidth: 2, visible: state.buffExpectationVisibility.exp10, decimals: 2 },
+    { name: '前20关', data: rows.map((r) => r.fullBuffExpected20), color: '#1769aa', lineWidth: 2, visible: state.buffExpectationVisibility.exp20, decimals: 2 },
+    { name: '前50关', data: rows.map((r) => r.fullBuffExpected50), color: '#2f8f72', lineWidth: 2, visible: state.buffExpectationVisibility.exp50, decimals: 2 },
+    { name: '前100关', data: rows.map((r) => r.fullBuffExpected100), color: '#8a63d2', lineWidth: 2, visible: state.buffExpectationVisibility.exp100, decimals: 2 },
   ];
   drawLines(els.buffExpectationCanvas, seriesEntries, { levelIds: rows.map((r) => r.levelId), padding: { top: 20, right: 24, bottom: 42, left: 44 } });
 }
@@ -991,7 +995,7 @@ function exportFocusTable() {
   const rows = focusRowsData();
   const range = getFocusRange();
   const finalLabel = getDifficultyPresentationLabel(getDifficultyPresentation(state.config).mode);
-  const header = ['关卡', '基础增长值', '周期修正', '特殊关修正', finalLabel, '近10关', '近20关', '近50关', '近100关', '首输0buff率', '首闯1级buff率', '首闯2级buff率', '首闯3级buff率', '首闯4级buff率', '首闯5级buff率'];
+  const header = ['关卡', '基础增长值', '周期修正', '特殊关修正', finalLabel, '前10关', '前20关', '前50关', '前100关', '首刷0buff率', '首刷1级buff率', '首刷2级buff率', '首刷3级buff率', '首刷4级buff率', '首刷5级buff率'];
   const lines = [header.join(',')].concat(rows.map((row) => [
     row.levelId,
     row.growth.toFixed(2),
@@ -1167,6 +1171,10 @@ async function init() {
       strength: 1,
       values: buildReferenceCycleValues(),
     },
+    displayRange: {
+      startLevel: 1,
+      endLevel: 3000,
+    },
     specialRules: {
       guideLevels: [1, 4, 7, 11, 16, 21, 31, 41, 51, 61, 71, 81, 91, 101, 121, 141, 161, 181, 201, 231, 261, 301, 351, 401, 451, 501, 551, 601, 651, 701, 751, 801, 851, 901, 951, 1001, 1101, 1201, 1301, 1401, 1501, 1601, 1701, 1801, 1901, 2001],
       coinLevels: [20, 50, 70, 100, 130, 160, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000, 2200],
@@ -1212,4 +1220,3 @@ async function init() {
 init().catch((error) => {
   document.body.innerHTML = `<pre style="padding:24px;color:#b00020;white-space:pre-wrap;">初始化失败\n${error.message}</pre>`;
 });
-

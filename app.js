@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260702-01';
+const DATA_VERSION = '20260702-02';
 
 const state = {
   seeds: {},
@@ -372,12 +372,10 @@ function cloneConfigForKey(key) {
 }
 function configToForm() {
   const c = state.config;
-  els.levelCount.value = c.levelCount;
   const growthParts = splitGrowthFormula(c.growth.formula);
   els.growthFormulaNumerator.value = c.growth.formulaNumerator ?? growthParts.numerator;
   els.growthFormulaDenominator.value = c.growth.formulaDenominator ?? growthParts.denominator;
   els.growthCap.value = c.growth.cap ?? '';
-  els.cycleLength.value = c.cycle.length;
   els.guideDifficulty.value = c.specialRules.guideDifficulty;
   els.coinDifficulty.value = c.specialRules.coinDifficulty;
   els.tailCapMax.value = c.specialRules.tailCapMax;
@@ -390,8 +388,9 @@ function configToForm() {
   els.coinLevels.value = (c.specialRules.coinLevels || []).join(', ');
   els.halfStepThreshold.value = c.rounding.halfStepThreshold;
   els.integerThreshold.value = c.rounding.integerThreshold;
-  els.focusStart.value = 1;
-  els.focusEnd.value = Math.min(c.levelCount, 2200);
+  const displayRange = getDisplayRange(c);
+  els.focusStart.value = displayRange.startLevel;
+  els.focusEnd.value = displayRange.endLevel;
   if (els.showGrowth) els.showGrowth.checked = !!state.chartVisibility.growth;
   if (els.showFinal) els.showFinal.checked = !!state.chartVisibility.final;
   syncLegendState();
@@ -402,12 +401,10 @@ function configToForm() {
 
 function updateConfigFromForm() {
   const c = state.config;
-  c.levelCount = Math.round(num(els.levelCount.value, c.levelCount));
   c.growth.formulaNumerator = els.growthFormulaNumerator.value.trim() || c.growth.formulaNumerator || '';
   c.growth.formulaDenominator = String(num(els.growthFormulaDenominator.value, num(c.growth.formulaDenominator, 1))).trim() || String(c.growth.formulaDenominator || 1);
   c.growth.formula = buildGrowthFormula(c.growth);
   c.growth.cap = parseOptionalPositiveNumber(els.growthCap.value);
-  c.cycle.length = Math.max(1, Math.round(num(els.cycleLength.value, c.cycle.length)));
   c.specialRules.guideDifficulty = num(els.guideDifficulty.value, c.specialRules.guideDifficulty);
   c.specialRules.coinDifficulty = num(els.coinDifficulty.value, c.specialRules.coinDifficulty);
   c.specialRules.tailCapMax = num(els.tailCapMax.value, c.specialRules.tailCapMax);
@@ -505,7 +502,7 @@ function buildOverrideTable() {
 
 function renderHero() {
   els.projectTitle.textContent = state.config.meta?.projectName || '项目调试面板';
-  const rows = state.result.rows;
+  const rows = focusRowsData();
   const finalSeries = rows.map((r) => r.finalDifficulty);
   const avg = finalSeries.reduce((a, b) => a + b, 0) / finalSeries.length;
   const max = Math.max(...finalSeries);
@@ -836,7 +833,7 @@ function setupChartTooltip(canvas) {
 }
 
 function renderChart() {
-  const rows = state.result.rows;
+  const rows = focusRowsData();
   const seriesEntries = [
     { key: 'final', name: '最终输出', data: rows.map((r) => r.finalDifficulty), color: '#2f8f72', visible: state.chartVisibility.final, lineWidth: 2.8, decimals: 1 },
     { key: 'growth', name: '基础增长', data: rows.map((r) => r.growth), color: '#d7a300', visible: state.chartVisibility.growth, lineWidth: 2.2 },
