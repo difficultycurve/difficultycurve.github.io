@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>难度曲线动态计算器</title>
-  <link rel="stylesheet" href="./styles.css?v=20260702-11" />
+  <link rel="stylesheet" href="./styles.css?v=20260702-12" />
 </head>
 <body>
   <div class="app-shell">
@@ -92,11 +92,11 @@
         <div class="grid two">
           <label>引导关难度<input id="guideDifficulty" type="number" min="0.5" max="5" step="0.1" /></label>
           <label>金币关难度<input id="coinDifficulty" type="number" min="0.5" max="5" step="0.1" /></label>
-          <label>尾号关封顶<input id="tailCapMax" type="number" min="0.5" max="10" step="0.1" /></label>
-          <label>尾号窗口<input id="tailCapWindow" type="number" min="1" max="50" step="1" /></label>
+          <label>50关周期第 x 关<input id="tailCapPositions" type="text" inputmode="numeric" placeholder="1, 11" /></label>
+          <label>封顶难度 y<input id="tailCapMax" type="number" min="0.5" max="10" step="0.1" /></label>
         </div>
         <div class="special-rule-list">
-          <label class="switch special-rule-toggle"><input id="tailCapEnabled" type="checkbox" /><span>启用尾号关封顶</span></label>
+          <label class="switch special-rule-toggle"><input id="tailCapEnabled" type="checkbox" /><span>启用周期位置封顶</span></label>
           <div class="special-rule-row">
             <label class="switch special-rule-toggle"><input id="streakEnabled" type="checkbox" /><span>启用连胜额外系数<span class="switch-note">（暂时没用）</span></span></label>
             <label class="special-rule-input">连胜额外系数<input id="streakExtraDefault" type="number" min="0.1" step="0.05" /></label>
@@ -134,7 +134,7 @@
         <ol>
           <li>左侧先填基础增长公式和 50关均值。系统会把关卡号代入 x，先算基础增长公式，再除以 50关均值，得到基础增长值。</li>
           <li>再看“50关小循环难度”。每一关会乘上对应的周期值，让难度出现节奏起伏。</li>
-          <li>接着套用特殊关规则，例如引导关、金币关、尾号关封顶和前 50 关人工微调。</li>
+          <li>接着套用特殊关规则，例如引导关、金币关、周期位置封顶和前 50 关人工微调。</li>
           <li>最后按取整规则处理，得到右侧曲线和详细数据表里的“最终难度”。</li>
         </ol>
         <p class="muted formula-line">简单理解：基础增长公式先定大趋势，基础增长值再参与最终计算，周期值制造波动，特殊关规则做局部修正，取整后就是最终输出。</p>
@@ -289,7 +289,7 @@
     </main>
   </div>
 
-  <script src="./app.js?v=20260702-10"></script>
+  <script src="./app.js?v=20260702-12"></script>
 </body>
 </html>
 

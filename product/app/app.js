@@ -42,6 +42,32 @@ function parseLevelList(text) {
     .map((v) => Math.round(v));
 }
 
+function normalizeCyclePositions(list, cycleLength = 50) {
+  const length = Math.max(1, Math.round(num(cycleLength, 50)));
+  const seen = new Set();
+  return (list || [])
+    .map((v) => Math.round(num(v, NaN)))
+    .filter((v) => {
+      if (!Number.isFinite(v) || v < 1 || v > length || seen.has(v)) return false;
+      seen.add(v);
+      return true;
+    });
+}
+
+function deriveTailCapPositions(specialRules = {}, cycleLength = 50) {
+  if (Array.isArray(specialRules.tailCapPositions)) {
+    return normalizeCyclePositions(specialRules.tailCapPositions, cycleLength);
+  }
+  const length = Math.max(1, Math.round(num(cycleLength, 50)));
+  const window = Math.min(length, Math.max(1, Math.round(num(specialRules.tailCapWindow, 11))));
+  const digit = ((Math.round(num(specialRules.tailCapDigit, 1)) % 10) + 10) % 10;
+  const positions = [];
+  for (let pos = 1; pos <= window; pos += 1) {
+    if (pos % 10 === digit) positions.push(pos);
+  }
+  return normalizeCyclePositions(positions.length ? positions : [1, 11], length);
+}
+
 function levelSet(list) {
   return new Set((list || []).map((v) => Math.round(v)));
 }
@@ -281,10 +307,10 @@ function computeModel(config) {
     }
 
     if (config.specialRules.tailCapEnabled) {
-      const window = Math.max(1, Math.round(num(config.specialRules.tailCapWindow, 11)));
-      const digit = Math.round(num(config.specialRules.tailCapDigit, 1));
-      const pos = ((levelId - 1) % Math.max(1, Math.round(num(config.cycle.length, 50)))) + 1;
-      if (pos <= window && levelId % 10 === digit) {
+      const cycleLength = Math.max(1, Math.round(num(config.cycle.length, 50)));
+      const tailCapPositions = new Set(deriveTailCapPositions(config.specialRules, cycleLength));
+      const pos = ((levelId - 1) % cycleLength) + 1;
+      if (tailCapPositions.has(pos)) {
         adjusted = Math.min(adjusted, num(config.specialRules.tailCapMax, 2));
       }
     }
@@ -398,7 +424,7 @@ function initEls() {
   [
     'dataSource','resetBtn','saveBtn','exportBtn','levelCount','growthFormulaNumerator','growthFormulaDenominator','growthCap','cycleLength','cycleValues',
     'difficultyPresentationMode','noItemCoeff','comprehensiveCoeff',
-    'guideDifficulty','coinDifficulty','tailCapMax','tailCapWindow','tailCapEnabled','streakEnabled','streakExtraDefault','guideLevels',
+    'guideDifficulty','coinDifficulty','tailCapPositions','tailCapMax','tailCapEnabled','streakEnabled','streakExtraDefault','guideLevels',
     'coinLevels','buffStartLevel','buffGrid','halfStepThreshold','integerThreshold','projectTitle','heroMode','heroStats',
     'focusStart','focusEnd','focusTable','overrideTable','curveCanvas','trendCanvas','buffExpectationCanvas','protocolWarning',
     'runtimeWarning','runtimeWarningText','showGrowth','showFinal','showTrendGrowth','showAvg10','showAvg20','showAvg50','showAvg100',
@@ -470,8 +496,9 @@ function configToForm() {
   if (els.comprehensiveCoeff) els.comprehensiveCoeff.value = presentation.comprehensiveCoeff ?? defaults.comprehensiveCoeff;
   els.guideDifficulty.value = c.specialRules.guideDifficulty;
   els.coinDifficulty.value = c.specialRules.coinDifficulty;
+  c.specialRules.tailCapPositions = deriveTailCapPositions(c.specialRules, c.cycle.length);
+  els.tailCapPositions.value = c.specialRules.tailCapPositions.join(', ');
   els.tailCapMax.value = c.specialRules.tailCapMax;
-  els.tailCapWindow.value = c.specialRules.tailCapWindow;
   els.tailCapEnabled.checked = !!c.specialRules.tailCapEnabled;
   els.streakEnabled.checked = !!c.specialRules.streakEnabled;
   els.streakExtraDefault.value = c.specialRules.streakExtraDefault ?? 1.1;
@@ -507,8 +534,8 @@ function updateConfigFromForm() {
   };
   c.specialRules.guideDifficulty = num(els.guideDifficulty.value, c.specialRules.guideDifficulty);
   c.specialRules.coinDifficulty = num(els.coinDifficulty.value, c.specialRules.coinDifficulty);
+  c.specialRules.tailCapPositions = normalizeCyclePositions(parseLevelList(els.tailCapPositions.value), c.cycle.length);
   c.specialRules.tailCapMax = num(els.tailCapMax.value, c.specialRules.tailCapMax);
-  c.specialRules.tailCapWindow = Math.round(num(els.tailCapWindow.value, c.specialRules.tailCapWindow));
   c.specialRules.tailCapEnabled = els.tailCapEnabled.checked;
   c.specialRules.streakEnabled = els.streakEnabled.checked;
   c.specialRules.streakExtraDefault = num(els.streakExtraDefault.value, c.specialRules.streakExtraDefault ?? 1.1);
@@ -1028,7 +1055,7 @@ function exportFocusTable() {
 function bindBaseInputs() {
   [
     'levelCount','growthFormulaNumerator','growthFormulaDenominator','growthCap','cycleLength','difficultyPresentationMode','noItemCoeff','comprehensiveCoeff',
-    'guideDifficulty','coinDifficulty','tailCapMax','tailCapWindow','tailCapEnabled','streakEnabled','buffStartLevel','guideLevels','coinLevels','halfStepThreshold',
+    'guideDifficulty','coinDifficulty','tailCapPositions','tailCapMax','tailCapEnabled','streakEnabled','streakExtraDefault','buffStartLevel','guideLevels','coinLevels','halfStepThreshold',
     'integerThreshold','focusStart','focusEnd'
   ].forEach((id) => {
     if (!els[id]) return;
@@ -1180,6 +1207,7 @@ async function init() {
       guideDifficulty: 1,
       coinDifficulty: 1,
       tailCapEnabled: true,
+      tailCapPositions: [1, 11],
       tailCapWindow: 11,
       tailCapDigit: 1,
       tailCapMax: 2,
