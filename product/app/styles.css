@@ -295,6 +295,13 @@ button.secondary:hover { background: #d4e0eb; }
   line-height: 1.15;
 }
 
+.hero-mode {
+  margin: 8px 0 0;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .hero-side {
   display: grid;
   gap: 12px;
@@ -324,7 +331,7 @@ button.secondary:hover { background: #d4e0eb; }
 
 .hero-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   align-items: stretch;
   justify-content: stretch;

@@ -399,7 +399,7 @@ function initEls() {
     'dataSource','resetBtn','saveBtn','exportBtn','levelCount','growthFormulaNumerator','growthFormulaDenominator','growthCap','cycleLength','cycleValues',
     'difficultyPresentationMode','noItemCoeff','comprehensiveCoeff',
     'guideDifficulty','coinDifficulty','tailCapMax','tailCapWindow','tailCapEnabled','streakEnabled','streakExtraDefault','guideLevels',
-    'coinLevels','buffStartLevel','buffGrid','halfStepThreshold','integerThreshold','projectTitle','heroStats',
+    'coinLevels','buffStartLevel','buffGrid','halfStepThreshold','integerThreshold','projectTitle','heroMode','heroStats',
     'focusStart','focusEnd','focusTable','overrideTable','curveCanvas','trendCanvas','buffExpectationCanvas','protocolWarning',
     'runtimeWarning','runtimeWarningText','showGrowth','showFinal','showTrendGrowth','showAvg10','showAvg20','showAvg50','showAvg100',
     'showBuffExpected10','showBuffExpected20','showBuffExpected50','showBuffExpected100',
@@ -605,14 +605,13 @@ function buildOverrideTable() {
 
 function renderHero() {
   els.projectTitle.textContent = state.config.meta?.projectName || '项目调试面板';
+  if (els.heroMode) els.heroMode.textContent = `当前-${getDifficultyPresentationSummary(state.config).label}`;
   const rows = focusRowsData();
   const displayRows = rows.length ? rows : state.result.rows;
   const finalSeries = displayRows.map((r) => r.finalDifficulty);
   const avg = finalSeries.reduce((a, b) => a + b, 0) / finalSeries.length;
   const max = Math.max(...finalSeries);
-  const summary = getDifficultyPresentationSummary(state.config);
   els.heroStats.innerHTML = `
-    <span class="pill">当前口径 ${summary.summary}</span>
     <span class="pill">平均难度 ${avg.toFixed(2)}</span>
     <span class="pill">最大 ${max.toFixed(2)}</span>
   `;
