@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260701-06';
+const DATA_VERSION = '20260702-01';
 
 const state = {
   seeds: {},
@@ -13,6 +13,13 @@ const state = {
 
 const els = {};
 const SAVED_CONFIG_PREFIX = 'difficultyCurve.savedConfig.';
+const RENDER_DEBOUNCE_MS = 90;
+
+const renderQueue = {
+  fullTimer: 0,
+  viewFrame: 0,
+};
+
 
 async function loadJson(path) {
   const separator = path.includes('?') ? '&' : '?';
@@ -193,11 +200,9 @@ function computeModel(config) {
 
   const rows = [];
   for (let levelId = 1; levelId <= levelCount; levelId += 1) {
-    const baseGrowth = applyGrowthCap(
-      evaluateGrowthFormula(config.growth.formulaNumerator || buildGrowthFormula(config.growth), levelId),
-      growthCap,
-    );
-    const growth = applyGrowthCap(evaluateGrowthFormula(buildGrowthFormula(config.growth), levelId), growthCap);
+    const growthFormula = config.growth.formulaNumerator || buildGrowthFormula(config.growth);
+    const growth = applyGrowthCap(evaluateGrowthFormula(growthFormula, levelId), growthCap);
+    const baseGrowth = growth;
     const cycleFactor = getCycleFactor(levelId, config.cycle);
     const cycleValue = growth * cycleFactor;
 
@@ -443,7 +448,7 @@ function buildCycleValueInputs() {
     input.addEventListener('input', () => {
       state.config.cycle.values[idx] = num(input.value, value);
       updateCycleAverage();
-      recompute();
+      scheduleRecompute();
     });
     els.cycleValues.appendChild(label);
   });
@@ -465,7 +470,7 @@ function buildBuffInputs() {
         const index = Number(input.dataset.index);
         const kind = input.dataset.kind;
         state.config.buffModel[kind === 'weight' ? 'weights' : 'decay'][index] = num(input.value, 0);
-        recompute();
+        scheduleRecompute();
       });
     });
     els.buffGrid.appendChild(wrap);
@@ -492,7 +497,7 @@ function buildOverrideTable() {
       } else {
         state.config.manualOverrides.push({ levelId, difficulty: num(raw, 0) });
       }
-      recompute();
+      scheduleRecompute();
     });
     els.overrideTable.appendChild(item);
   }
@@ -556,6 +561,33 @@ function renderFocusTable() {
   `).join('');
 }
 
+
+function renderDisplayViews() {
+  if (!state.result) return;
+  renderFocusTable();
+  renderChart();
+  renderBuffDistributionChart();
+  renderTrendChart();
+  renderBuffExpectationChart();
+  syncLegendState();
+  syncSpecialRuleControls();
+}
+
+function scheduleDisplayRefresh() {
+  if (renderQueue.viewFrame) return;
+  renderQueue.viewFrame = window.requestAnimationFrame(() => {
+    renderQueue.viewFrame = 0;
+    renderDisplayViews();
+  });
+}
+
+function scheduleRecompute() {
+  window.clearTimeout(renderQueue.fullTimer);
+  renderQueue.fullTimer = window.setTimeout(() => {
+    renderQueue.fullTimer = 0;
+    recompute();
+  }, RENDER_DEBOUNCE_MS);
+}
 
 function drawBuffDistributionBars(canvas, rows) {
   if (!canvas) return;
@@ -868,13 +900,7 @@ function recompute() {
     state.result = computeModel(state.config);
     hideRuntimeWarning();
     renderHero();
-    renderFocusTable();
-    renderChart();
-    renderBuffDistributionChart();
-    renderTrendChart();
-    renderBuffExpectationChart();
-    syncLegendState();
-    syncSpecialRuleControls();
+    renderDisplayViews();
     ['growthFormulaNumerator','growthFormulaDenominator'].forEach((id) => {
       if (els[id]) els[id].style.borderColor = '';
     });
@@ -887,7 +913,6 @@ function recompute() {
     console.error(error);
   }
 }
-
 
 function exportFocusTable() {
   const rows = focusRowsData();
@@ -923,7 +948,7 @@ function bindBaseInputs() {
   [
     'levelCount','growthFormulaNumerator','growthFormulaDenominator','growthCap','cycleLength','guideDifficulty','coinDifficulty','tailCapMax',
     'tailCapWindow','tailCapEnabled','streakEnabled','buffStartLevel','guideLevels','coinLevels','halfStepThreshold',
-    'integerThreshold','focusStart','focusEnd'
+    'integerThreshold'
   ].forEach((id) => {
     if (!els[id]) return;
     els[id].addEventListener('input', () => {
@@ -934,8 +959,13 @@ function bindBaseInputs() {
         }
         syncSpecialRuleControls();
       }
-      recompute();
+      scheduleRecompute();
     });
+  });
+
+  ['focusStart', 'focusEnd'].forEach((id) => {
+    if (!els[id]) return;
+    els[id].addEventListener('input', scheduleDisplayRefresh);
   });
 
   if (els.dataSource) els.dataSource.addEventListener('change', () => {
@@ -955,7 +985,7 @@ function bindBaseInputs() {
   if (els.saveBtn) els.saveBtn.addEventListener('click', saveCurrentConfig);
 
   if (els.exportBtn) els.exportBtn.addEventListener('click', () => {
-    const blob = new Blob([JSON.stringify(state.config, null, 2)], { type: 'application/json;charset=utf-8' });
+    const blob = new Blob([JSON.stringify(state.config, null, 2)], { type: "application/json;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -972,7 +1002,7 @@ function bindBaseInputs() {
     els[id].addEventListener('change', () => {
       state.chartVisibility[key] = els[id].checked;
       syncLegendState();
-      renderChart();
+      scheduleDisplayRefresh();
     });
   });
 
@@ -987,7 +1017,7 @@ function bindBaseInputs() {
     els[id].addEventListener('change', () => {
       state.buffVisibility[key] = els[id].checked;
       syncLegendState();
-      renderBuffDistributionChart();
+      scheduleDisplayRefresh();
     });
   });
 
@@ -1002,7 +1032,7 @@ function bindBaseInputs() {
     els[id].addEventListener('change', () => {
       state.trendVisibility[key] = els[id].checked;
       syncLegendState();
-      renderTrendChart();
+      scheduleDisplayRefresh();
     });
   });
 
@@ -1016,7 +1046,7 @@ function bindBaseInputs() {
     els[id].addEventListener('change', () => {
       state.buffExpectationVisibility[key] = els[id].checked;
       syncLegendState();
-      renderBuffExpectationChart();
+      scheduleDisplayRefresh();
     });
   });
 
