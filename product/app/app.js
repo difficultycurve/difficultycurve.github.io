@@ -496,7 +496,9 @@ function configToForm() {
   if (els.comprehensiveCoeff) els.comprehensiveCoeff.value = presentation.comprehensiveCoeff ?? defaults.comprehensiveCoeff;
   els.guideDifficulty.value = c.specialRules.guideDifficulty;
   els.coinDifficulty.value = c.specialRules.coinDifficulty;
+  const hasTailCapPositions = Array.isArray(c.specialRules.tailCapPositions);
   c.specialRules.tailCapPositions = deriveTailCapPositions(c.specialRules, c.cycle.length);
+  if (!hasTailCapPositions) c.specialRules.tailCapMax = 2;
   els.tailCapPositions.value = c.specialRules.tailCapPositions.join(', ');
   els.tailCapMax.value = c.specialRules.tailCapMax;
   els.tailCapEnabled.checked = !!c.specialRules.tailCapEnabled;
