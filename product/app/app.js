@@ -2,7 +2,7 @@ const DATA_VERSION = '20260701-13';
 
 const state = {
   seeds: {},
-  currentKey: 'reference',
+  currentKey: 'default',
   config: null,
   result: null,
   chartVisibility: { growth: true, final: true },
