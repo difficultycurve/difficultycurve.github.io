@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>难度曲线动态计算器</title>
-  <link rel="stylesheet" href="./styles.css?v=20260702-10" />
+  <link rel="stylesheet" href="./styles.css?v=20260702-11" />
 </head>
 <body>
   <div class="app-shell">
@@ -95,10 +95,12 @@
           <label>尾号关封顶<input id="tailCapMax" type="number" min="0.5" max="10" step="0.1" /></label>
           <label>尾号窗口<input id="tailCapWindow" type="number" min="1" max="50" step="1" /></label>
         </div>
-        <label class="switch"><input id="tailCapEnabled" type="checkbox" />启用尾号关封顶</label>
-        <div class="grid two">
-          <label class="switch"><input id="streakEnabled" type="checkbox" />启用连胜额外系数（暂时没用）</label>
-          <label>连胜额外系数<input id="streakExtraDefault" type="number" min="0.1" step="0.05" /></label>
+        <div class="special-rule-list">
+          <label class="switch special-rule-toggle"><input id="tailCapEnabled" type="checkbox" /><span>启用尾号关封顶</span></label>
+          <div class="special-rule-row">
+            <label class="switch special-rule-toggle"><input id="streakEnabled" type="checkbox" /><span>启用连胜额外系数<span class="switch-note">（暂时没用）</span></span></label>
+            <label class="special-rule-input">连胜额外系数<input id="streakExtraDefault" type="number" min="0.1" step="0.05" /></label>
+          </div>
         </div>
         <label>引导关列表<textarea id="guideLevels" rows="3"></textarea></label>
         <label>金币关列表<textarea id="coinLevels" rows="2"></textarea></label>

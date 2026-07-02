@@ -473,6 +473,50 @@ button.secondary:hover { background: #d4e0eb; }
   height: auto;
 }
 
+.special-rule-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 14px;
+}
+
+.special-rule-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 118px;
+  gap: 10px;
+  align-items: end;
+}
+
+.special-rule-toggle {
+  min-height: 38px;
+  margin-top: 0;
+  line-height: 1.35;
+}
+
+.special-rule-toggle input {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.special-rule-toggle span {
+  min-width: 0;
+}
+
+.switch-note {
+  display: inline-block;
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.special-rule-input {
+  margin-top: 0;
+}
+
+.special-rule-input input {
+  height: 38px;
+}
+
 .legend { justify-content: flex-end; }
 
 .chart-actions {
@@ -770,7 +814,17 @@ tbody tr:hover { background: #eef6ff; }
     width: 100%;
   }
 
+  .special-rule-row {
+    grid-template-columns: minmax(0, 1fr) 112px;
+  }
+
   canvas { min-width: 680px; }
+}
+
+@media (max-width: 420px) {
+  .special-rule-row {
+    grid-template-columns: 1fr;
+  }
 }
 input[type="number"] {
   appearance: textfield;
