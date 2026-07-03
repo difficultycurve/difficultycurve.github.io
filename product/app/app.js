@@ -1230,6 +1230,28 @@ async function init() {
 
   state.seeds.default = deepClone(state.seeds.reference);
   state.seeds.default.meta = { ...state.seeds.default.meta, projectName: 'SH01' };
+  state.seeds.default.levelCount = 3000;
+  state.seeds.default.growth = {
+    formula: '(4*ln(x+180) - 19.79) / 2.1',
+    formulaNumerator: '4*ln(x+180) - 19.79',
+    formulaDenominator: '2.1',
+    cap: 11,
+  };
+  state.seeds.default.displayRange = { startLevel: 1, endLevel: 3000 };
+  state.seeds.default.specialRules = {
+    ...state.seeds.default.specialRules,
+    guideLevels: [1, 4, 7, 11, 21, 21, 31, 41, 51, 61, 71, 81, 91, 101, 121, 141, 161, 181, 201, 231, 261, 301, 351, 401, 451, 501, 551, 601, 651, 701, 751, 801, 851, 901, 951, 1001, 1101, 1101, 1201, 1301, 1401, 1501, 1601, 1701, 1801, 1901, 2001, 2201, 2401, 2601, 2801, 3001, 3201, 3401, 3601, 3801, 4001, 4201, 4401],
+    coinLevels: [],
+    guideDifficulty: 1,
+    coinDifficulty: 1,
+    tailCapEnabled: true,
+    tailCapPositions: [1, 11],
+    tailCapMax: 2,
+    streakEnabled: false,
+    streakExtraDefault: 1.1,
+    buffStartLevel: 33,
+  };
+  state.seeds.default.manualOverrides = [];
   state.seeds.default.difficultyPresentation = getDefaultDifficultyPresentation('SH01');
   state.config = cloneConfigForKey(state.currentKey);
   updateProtocolWarning();
