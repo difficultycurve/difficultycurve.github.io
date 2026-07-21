@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260721-03';
+const DATA_VERSION = '20260721-04';
 
 const state = {
   seeds: {},
@@ -722,7 +722,8 @@ function drawBuffDistributionBars(canvas, rows) {
   const usableH = height - padding.top - padding.bottom;
   const pointCount = rows.length;
   const gap = pointCount > 80 ? 1 : 2;
-  const barW = Math.max(1, (usableW / pointCount) - gap);
+  const slotW = usableW / pointCount;
+  const barW = Math.max(1, Math.floor(slotW - gap));
   const y = (value) => padding.top + usableH - value * usableH;
 
   ctx.strokeStyle = '#d7e0e8';
@@ -744,7 +745,7 @@ function drawBuffDistributionBars(canvas, rows) {
   rows.forEach((row, index) => {
     const distribution = row.theoreticalFirstBuffDistribution || [0, 0, 0, 0, 0];
     let stackTop = 0;
-    const x = padding.left + (index / pointCount) * usableW + gap / 2;
+    const x = Math.round(padding.left + (index + 0.5) * slotW - barW / 2);
     distribution.forEach((value, buffIndex) => {
       if (!visible[buffIndex]) return;
       const share = Math.max(0, value);
