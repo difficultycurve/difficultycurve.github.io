@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260721-02';
+const DATA_VERSION = '20260721-03';
 
 const state = {
   seeds: {},
@@ -13,6 +13,8 @@ const state = {
 
 const els = {};
 const SAVED_CONFIG_PREFIX = 'difficultyCurve.savedConfig.';
+const SH01_CYCLE_VERSION = '20260721-01';
+const SH01_CYCLE_VERSION_KEY = 'difficultyCurve.dataVersion.SH01.cycle';
 
 async function loadJson(path) {
   const separator = path.includes('?') ? '&' : '?';
@@ -475,6 +477,20 @@ function saveCurrentConfig() {
 
 function clearSavedConfig(key = state.currentKey) {
   localStorage.removeItem(savedConfigKey(key));
+}
+
+function migrateSavedSh01Cycle() {
+  try {
+    if (localStorage.getItem(SH01_CYCLE_VERSION_KEY) === SH01_CYCLE_VERSION) return;
+    const saved = loadSavedConfig('default');
+    if (saved) {
+      saved.cycle = deepClone(state.seeds.default.cycle);
+      localStorage.setItem(savedConfigKey('default'), JSON.stringify(saved));
+    }
+    localStorage.setItem(SH01_CYCLE_VERSION_KEY, SH01_CYCLE_VERSION);
+  } catch (error) {
+    console.warn('迁移 SH01 周期数据失败', error);
+  }
 }
 
 function cloneConfigForKey(key) {
@@ -1254,6 +1270,7 @@ async function init() {
   };
   state.seeds.default.manualOverrides = [];
   state.seeds.default.difficultyPresentation = getDefaultDifficultyPresentation('SH01');
+  migrateSavedSh01Cycle();
   state.config = cloneConfigForKey(state.currentKey);
   updateProtocolWarning();
   els.dataSource.value = state.currentKey;
