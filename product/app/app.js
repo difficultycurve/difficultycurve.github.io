@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260721-01';
+const DATA_VERSION = '20260721-02';
 
 const state = {
   seeds: {},
@@ -1230,6 +1230,7 @@ async function init() {
 
   state.seeds.default = deepClone(state.seeds.reference);
   state.seeds.default.meta = { ...state.seeds.default.meta, projectName: 'SH01' };
+  state.seeds.default.cycle = deepClone(defaultSeed.cycle);
   state.seeds.default.levelCount = 3000;
   state.seeds.default.growth = {
     formula: '(4*ln(x+180) - 19.79) / 2.1',
