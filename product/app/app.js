@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260721-04';
+const DATA_VERSION = '20260721-05';
 
 const state = {
   seeds: {},
@@ -704,6 +704,13 @@ function renderFocusTable() {
 
 function drawBuffDistributionBars(canvas, rows) {
   if (!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  const displayWidth = Math.max(1, Math.round(rect.width));
+  const displayHeight = Math.max(1, Math.round(rect.height));
+  if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+    canvas.width = displayWidth;
+    canvas.height = displayHeight;
+  }
   const ctx = canvas.getContext('2d');
   const width = canvas.width;
   const height = canvas.height;
@@ -1283,6 +1290,7 @@ async function init() {
   setupChartTooltip(els.buffExpectationCanvas);
   window.addEventListener('scroll', hideChartTooltip, true);
   window.addEventListener('blur', hideChartTooltip);
+  window.addEventListener('resize', renderBuffDistributionChart);
   document.addEventListener('mouseleave', hideChartTooltip);
   recompute();
 }
