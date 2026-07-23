@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>难度曲线动态计算器</title>
-  <link rel="stylesheet" href="./styles.css?v=20260702-12" />
+  <link rel="stylesheet" href="./styles.css?v=20260724-01" />
 </head>
 <body>
   <div class="app-shell">
@@ -108,7 +108,7 @@
       <section class="panel">
         <h2>Buff 模型</h2>
         <label>&#24320;&#21551;&#36830;&#32988;buff&#31561;&#32423;<input id="buffStartLevel" type="number" min="1" step="1" value="31" /></label>
-        <div class="buff-grid" id="buffGrid"></div>
+        <div class="buff-matrix" id="buffGrid"></div>
       </section>
 
       <section class="panel rounding-panel">
@@ -122,6 +122,22 @@
           <label>难度小于 x，难度不取整<input id="halfStepThreshold" type="number" step="0.1" /></label>
           <label>难度大于 y，难度取整<input id="integerThreshold" type="number" step="0.1" /></label>
           <label class="static-rule">难度介于 x 和 y 之间，难度取整或 0.5</label>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <h2>前50关人工微调</h2>
+          <p class="muted manual-tune-note">这里保留参考模型的前期手调习惯，适合按项目体感局部压或抬升。</p>
+        </div>
+        <div class="override-scroll compact-table">
+          <div class="override-grid-head">
+            <span>关卡</span>
+            <span>关卡难度</span>
+            <span>关卡</span>
+            <span>关卡难度</span>
+          </div>
+          <div class="override-grid" id="overrideTable"></div>
         </div>
       </section>
     </aside>
@@ -138,6 +154,18 @@
           <li>最后按取整规则处理，得到右侧曲线和详细数据表里的“最终难度”。</li>
         </ol>
         <p class="muted formula-line">简单理解：基础增长公式先定大趋势，基础增长值再参与最终计算，周期值制造波动，特殊关规则做局部修正，取整后就是最终输出。</p>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <h2>50关周期循环</h2>
+          <div class="legend compact-legend">
+            <label class="legend-toggle"><input id="showCycleLine" type="checkbox" checked /><span class="swatch cycle"></span><span>周期难度</span></label>
+          </div>
+        </div>
+        <div class="chart-wrap cycle-chart-wrap">
+          <canvas id="cycleCanvas" width="1200" height="280"></canvas>
+        </div>
       </section>
 
       <section class="hero">
@@ -170,6 +198,7 @@
           <div class="legend" id="curveLegend">
             <label class="legend-toggle"><input id="showGrowth" type="checkbox" checked /><span class="swatch growth"></span><span>基础增长公式</span></label>
             <label class="legend-toggle"><input id="showFinal" type="checkbox" checked /><span class="swatch final"></span><span id="finalDifficultyLegendText">最终难度</span></label>
+            <label class="legend-toggle"><input id="showTheoreticalBuff" type="checkbox" checked /><span class="swatch theoretical-buff"></span><span>关卡理论有buff难度</span></label>
           </div>
         </div>
         <p class="muted section-help">基础增长公式：只看左侧“基础增长公式（x代表关卡id）”的底盘走势（封顶后）；最终输出：再经过基础增长值、特殊关、前 50 关手调和取整规则后的最终难度，对应 Excel 的最终曲线结果。</p>
@@ -183,7 +212,7 @@
             <h2>详细数据</h2>
             <p class="muted section-help detail-help">
               <span>基础增长值：基础增长公式 / 50关均值后的难度；周期修正：叠加周期后的难度。</span>
-              <span>特殊关修正：再经过引导关、金币关等规则修正后的难度；最终难度：按取整规则得到的最终结果。</span>
+              <span>特殊关修正：再经过引导关、金币关等规则修正后的难度；最终难度：按取整规则得到的最终结果；关卡理论有buff难度：按各 buff 预计闯关次数加权后的难度。</span>
               <span>前10关 / 前20关 / 前50关 / 前100关：从当前关往前看的滚动平均难度。</span>
             </p>
           </div>
@@ -200,6 +229,7 @@
                 <th>周期修正</th>
                 <th>特殊关修正</th>
                 <th id="finalDifficultyHeader">最终难度</th>
+                <th>关卡理论有buff难度</th>
                 <th>前10关</th>
                 <th>前20关</th>
                 <th>前50关</th>
@@ -273,23 +303,24 @@
 
       <section class="panel">
         <div class="section-head">
-          <h2>前50 关人工微调</h2>
-          <p class="muted manual-tune-note">这里保留参考模型的前期手调习惯，适合按项目体感局部压或抬升。</p>
-        </div>
-        <div class="override-scroll compact-table">
-          <div class="override-grid-head">
-            <span>关卡</span>
-            <span>关卡难度</span>
-            <span>关卡</span>
-            <span>关卡难度</span>
+          <h2>趋势-关卡理论有buff难度</h2>
+          <div class="legend compact-legend" id="theoreticalBuffTrendLegend">
+            <label class="legend-toggle"><input id="showTheoreticalBuffDifficulty" type="checkbox" checked /><span class="swatch theoretical-buff"></span><span>关卡理论有buff难度</span></label>
+            <label class="legend-toggle"><input id="showTheoreticalBuffAvg10" type="checkbox" checked /><span class="swatch avg10"></span><span>前10关</span></label>
+            <label class="legend-toggle"><input id="showTheoreticalBuffAvg20" type="checkbox" checked /><span class="swatch avg20"></span><span>前20关</span></label>
+            <label class="legend-toggle"><input id="showTheoreticalBuffAvg50" type="checkbox" checked /><span class="swatch avg50"></span><span>前50关</span></label>
+            <label class="legend-toggle"><input id="showTheoreticalBuffAvg100" type="checkbox" checked /><span class="swatch avg100"></span><span>前100关</span></label>
           </div>
-          <div class="override-grid" id="overrideTable"></div>
+        </div>
+        <p class="muted section-help">这里展示每关的理论有buff难度，以及分别向前10、20、50、100关计算的滚动平均难度。</p>
+        <div class="chart-wrap">
+          <canvas id="theoreticalBuffTrendCanvas" width="1200" height="340"></canvas>
         </div>
       </section>
     </main>
   </div>
 
-  <script src="./app.js?v=20260721-05"></script>
+  <script src="./app.js?v=20260724-01"></script>
 </body>
 </html>
 

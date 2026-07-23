@@ -141,7 +141,7 @@ h3 { margin-bottom: 8px; }
 
 .field-group,
 .grid.two,
-.buff-grid,
+.buff-matrix,
 .cycle-grid,
 .formula-part {
   min-width: 0;
@@ -438,26 +438,58 @@ button.secondary:hover { background: #d4e0eb; }
   overflow: auto;
 }
 
-.buff-grid {
+.buff-matrix {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 10px;
+  gap: 6px;
+  margin-top: 12px;
+  overflow-x: auto;
 }
 
-.buff-item {
+.buff-matrix-row {
   display: grid;
-  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: center;
+  gap: 6px;
   min-width: 0;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--subtle);
+  padding: 4px 0 8px;
 }
 
-.buff-item h2 {
-  margin-bottom: 0;
-  font-size: 14px;
+.buff-matrix-row > strong,
+.buff-matrix-head > span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.buff-matrix-row > strong {
+  grid-column: 1 / -1;
+  color: var(--text);
+  font-weight: 700;
+  text-align: left;
+}
+
+.buff-matrix-row label {
+  display: grid;
+  gap: 3px;
+}
+
+.buff-matrix-row label span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.buff-matrix-row input {
+  height: 34px;
+  padding: 5px 3px;
+  font-size: 11px;
+  text-align: center;
+}
+
+.buff-matrix-head {
+  display: none;
 }
 
 .switch {
@@ -566,6 +598,7 @@ button.secondary:hover { background: #d4e0eb; }
 .swatch.cycle { background: var(--accent-4); }
 .swatch.buffed { background: var(--accent-3); }
 .swatch.final { background: var(--accent-2); }
+.swatch.theoretical-buff { background: var(--accent-4); }
 .swatch.avg10 { background: var(--avg10); }
 .swatch.avg20 { background: var(--avg20); }
 .swatch.avg50 { background: var(--avg50); }
@@ -585,6 +618,8 @@ button.secondary:hover { background: #d4e0eb; }
   background: linear-gradient(180deg, #fff 0%, #f8fbfd 100%);
 }
 
+.cycle-chart-wrap canvas { min-height: 260px; }
+
 canvas {
   display: block;
   width: 100%;
@@ -602,7 +637,7 @@ canvas {
 
 table {
   width: 100%;
-  min-width: 1500px;
+  min-width: 1620px;
   table-layout: fixed;
   border-collapse: collapse;
   font-size: 13px;
@@ -659,9 +694,8 @@ tbody tr:hover { background: #eef6ff; }
   top: 0;
   z-index: 2;
   display: grid;
-  grid-template-columns: 56px 1fr 56px 1fr;
+  grid-template-columns: 40px 1fr 40px 1fr;
   gap: 8px;
-  min-width: 430px;
   padding: 9px 10px;
   border-bottom: 1px solid var(--border);
   background: #f8fafc;
@@ -672,19 +706,18 @@ tbody tr:hover { background: #eef6ff; }
 
 .override-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(210px, 1fr));
-  gap: 8px 12px;
-  min-width: 430px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
   padding: 10px 0;
 }
 
 .override-item {
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
+  grid-template-columns: 40px minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
-  padding: 0 10px;
+  padding: 0 4px;
   color: var(--text);
 }
 
@@ -758,8 +791,7 @@ tbody tr:hover { background: #eef6ff; }
   .sidebar,
   .content { padding: 12px; }
 
-  .grid.two,
-  .buff-grid {
+  .grid.two {
     grid-template-columns: 1fr;
   }
 

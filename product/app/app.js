@@ -1,13 +1,15 @@
-const DATA_VERSION = '20260721-05';
+const DATA_VERSION = '20260724-01';
 
 const state = {
   seeds: {},
   currentKey: 'default',
   config: null,
   result: null,
-  chartVisibility: { growth: true, final: true },
+  chartVisibility: { growth: true, final: true, theoreticalBuff: true },
+  cycleVisibility: { cycle: true },
   trendVisibility: { growth: true, avg10: true, avg20: true, avg50: true, avg100: true },
   buffExpectationVisibility: { exp10: true, exp20: true, exp50: true, exp100: true },
+  theoreticalBuffTrendVisibility: { difficulty: true, avg10: true, avg20: true, avg50: true, avg100: true },
   buffVisibility: { buff1: true, buff2: true, buff3: true, buff4: true, buff5: true },
 };
 
@@ -15,6 +17,8 @@ const els = {};
 const SAVED_CONFIG_PREFIX = 'difficultyCurve.savedConfig.';
 const SH01_CYCLE_VERSION = '20260721-01';
 const SH01_CYCLE_VERSION_KEY = 'difficultyCurve.dataVersion.SH01.cycle';
+const BUFF_DECAY_CURRENT = [1, 0.6302319468, 0.4392866662, 0.3316306420, 0.1993753807, 0.0771788931];
+const SH01_BUFF_DECAY_FIRST_300 = [1, 0.677, 0.373, 0.152, 0.127, 0.038];
 
 async function loadJson(path) {
   const separator = path.includes('?') ? '&' : '?';
@@ -276,19 +280,26 @@ function passProbability(difficulty, coeff, itemUseRate = 0) {
   return Math.min(1, Math.max(0, raw + itemUseRate - itemUseRate * raw));
 }
 
+function calculateTheoreticalBuffDifficulty(difficulty, decay, zeroBuffRate, firstBuffDistribution) {
+  const zeroBuffExpectedAttempts = zeroBuffRate * difficulty;
+  const attemptWeights = [zeroBuffExpectedAttempts, ...firstBuffDistribution];
+  const totalAttempts = attemptWeights.reduce((sum, value) => sum + value, 0);
+  if (totalAttempts <= 0) return difficulty;
+  const weightedDifficulty = attemptWeights.reduce((sum, weight, idx) => {
+    const buffDifficulty = ((difficulty - 1) * (decay[idx] ?? 1)) + 1;
+    return sum + buffDifficulty * weight;
+  }, 0) / totalAttempts;
+  return Math.round(weightedDifficulty * 10) / 10;
+}
+
 function computeModel(config) {
   const levelCount = Math.max(1, Math.round(num(config.levelCount, 300)));
   const guideSet = levelSet(config.specialRules.guideLevels || []);
   const coinSet = levelSet(config.specialRules.coinLevels || []);
   const overrideMap = buildManualOverrideMap(config.manualOverrides || []);
+  ensureSegmentedBuffModel(config, String(config.meta?.projectName || '').toUpperCase() === 'SH01' ? 'default' : 'reference');
   const weights = normalizeWeights(config.buffModel.weights || []);
   const growthCap = config.growth?.cap;
-  const decay = (config.buffModel.decay || []).map((v, idx) => {
-    if (v === null || v === undefined || Number.isNaN(Number(v))) {
-      return Math.max(0, 1 - idx * 0.08);
-    }
-    return num(v, 1);
-  });
 
   const rows = [];
   for (let levelId = 1; levelId <= levelCount; levelId += 1) {
@@ -325,6 +336,7 @@ function computeModel(config) {
     if (coinSet.has(levelId)) adjusted = num(config.specialRules.coinDifficulty, 1);
     if (overrideMap.has(levelId)) adjusted = overrideMap.get(levelId);
 
+    const decay = buffDecayAt(config.buffModel, levelId);
     const buffed = Math.max(0.5, weights.reduce((sum, weight, idx) => {
       const coeff = decay[idx] ?? 1;
       return sum + (((adjusted - 1) * coeff) + 1) * weight;
@@ -344,6 +356,7 @@ function computeModel(config) {
       cycleValue,
       adjusted,
       buffed,
+      buffDecay: decay,
       bareDifficulty,
       finalDifficulty,
       isGuide: guideSet.has(levelId),
@@ -375,14 +388,18 @@ function computeModel(config) {
       row.theoreticalZeroBuffRate = fail0;
       row.theoreticalBuffDistribution = [fail0, 0, 0, 0, 0, 0];
       row.theoreticalFirstBuffDistribution = [0, 0, 0, 0, 0];
+      row.zeroBuffExpectedAttempts = 0;
+      row.theoreticalBuffDifficulty = row.finalDifficulty;
       return;
     }
 
     const prev = theoreticalRows[idx - 1] || { fail0: 1, buffCounts: [1, 0, 0, 0, 0, 0] };
     const prevDifficulty = rows[idx - 1]?.finalDifficulty ?? row.finalDifficulty;
     const currentDifficulty = row.finalDifficulty;
-    const prevPass = decay.map((coeff, buffIndex) => passProbability(prevDifficulty, coeff, buffIndex === 5 ? itemUseRate : 0));
-    const currentPass = decay.map((coeff, buffIndex) => passProbability(currentDifficulty, coeff, buffIndex === 5 ? itemUseRate : 0));
+    const prevDecay = rows[idx - 1]?.buffDecay || row.buffDecay;
+    const currentDecay = row.buffDecay;
+    const prevPass = prevDecay.map((coeff, buffIndex) => passProbability(prevDifficulty, coeff, buffIndex === 5 ? itemUseRate : 0));
+    const currentPass = currentDecay.map((coeff, buffIndex) => passProbability(currentDifficulty, coeff, buffIndex === 5 ? itemUseRate : 0));
     const buffCounts = [
       0,
       prev.fail0,
@@ -401,6 +418,25 @@ function computeModel(config) {
     row.theoreticalZeroBuffRate = fail0;
     row.theoreticalBuffDistribution = buffCounts;
     row.theoreticalFirstBuffDistribution = buffCounts.slice(1);
+    row.zeroBuffExpectedAttempts = fail0 * currentDifficulty;
+    row.theoreticalBuffDifficulty = calculateTheoreticalBuffDifficulty(
+      currentDifficulty,
+      currentDecay,
+      fail0,
+      row.theoreticalFirstBuffDistribution,
+    );
+  });
+
+  const theoreticalBuffSeries = rows.map((row) => row.theoreticalBuffDifficulty);
+  const theoreticalBuffAvg10 = rollingAverage(theoreticalBuffSeries, 10);
+  const theoreticalBuffAvg20 = rollingAverage(theoreticalBuffSeries, 20);
+  const theoreticalBuffAvg50 = rollingAverage(theoreticalBuffSeries, 50);
+  const theoreticalBuffAvg100 = rollingAverage(theoreticalBuffSeries, 100);
+  rows.forEach((row, idx) => {
+    row.theoreticalBuffAvg10 = theoreticalBuffAvg10[idx];
+    row.theoreticalBuffAvg20 = theoreticalBuffAvg20[idx];
+    row.theoreticalBuffAvg50 = theoreticalBuffAvg50[idx];
+    row.theoreticalBuffAvg100 = theoreticalBuffAvg100[idx];
   });
 
   const fullBuffFirstRates = rows.map((row) => (row.levelId < buffStartLevel ? null : (row.theoreticalFirstBuffDistribution?.[4] || 0)));
@@ -428,9 +464,9 @@ function initEls() {
     'difficultyPresentationMode','noItemCoeff','comprehensiveCoeff',
     'guideDifficulty','coinDifficulty','tailCapPositions','tailCapMax','tailCapEnabled','streakEnabled','streakExtraDefault','guideLevels',
     'coinLevels','buffStartLevel','buffGrid','halfStepThreshold','integerThreshold','projectTitle','heroMode','heroStats',
-    'focusStart','focusEnd','focusTable','overrideTable','curveCanvas','trendCanvas','buffExpectationCanvas','protocolWarning',
-    'runtimeWarning','runtimeWarningText','showGrowth','showFinal','showTrendGrowth','showAvg10','showAvg20','showAvg50','showAvg100',
-    'showBuffExpected10','showBuffExpected20','showBuffExpected50','showBuffExpected100',
+    'focusStart','focusEnd','focusTable','overrideTable','curveCanvas','cycleCanvas','trendCanvas','buffExpectationCanvas','theoreticalBuffTrendCanvas','protocolWarning',
+    'runtimeWarning','runtimeWarningText','showGrowth','showFinal','showTheoreticalBuff','showCycleLine','showTrendGrowth','showAvg10','showAvg20','showAvg50','showAvg100',
+    'showBuffExpected10','showBuffExpected20','showBuffExpected50','showBuffExpected100','showTheoreticalBuffDifficulty','showTheoreticalBuffAvg10','showTheoreticalBuffAvg20','showTheoreticalBuffAvg50','showTheoreticalBuffAvg100',
     'showBuff1','showBuff2','showBuff3','showBuff4','showBuff5','buffDistributionCanvas','exportFocusBtn','cycleAverageValue',
     'finalDifficultyHeader','finalDifficultyLegendText'
   ].forEach((id) => { els[id] = $(id); });
@@ -493,8 +529,27 @@ function migrateSavedSh01Cycle() {
   }
 }
 
+function normalizeBuffDecay(values, fallback = BUFF_DECAY_CURRENT) {
+  return Array.from({ length: 6 }, (_, idx) => num(values?.[idx], fallback[idx] ?? 1));
+}
+
+function ensureSegmentedBuffModel(config, key) {
+  config.buffModel = config.buffModel || {};
+  const legacy = normalizeBuffDecay(config.buffModel.decay);
+  const first300Fallback = key === 'default' ? SH01_BUFF_DECAY_FIRST_300 : legacy;
+  config.buffModel.decayBefore300 = normalizeBuffDecay(config.buffModel.decayBefore300, first300Fallback);
+  config.buffModel.decayAfter300 = normalizeBuffDecay(config.buffModel.decayAfter300, legacy);
+  config.buffModel.decay = config.buffModel.decayAfter300.slice();
+  return config;
+}
+
+function buffDecayAt(buffModel, levelId) {
+  const source = levelId <= 300 ? buffModel.decayBefore300 : buffModel.decayAfter300;
+  return normalizeBuffDecay(source, buffModel.decay || BUFF_DECAY_CURRENT);
+}
+
 function cloneConfigForKey(key) {
-  return deepClone(loadSavedConfig(key) || state.seeds[key]);
+  return ensureSegmentedBuffModel(deepClone(loadSavedConfig(key) || state.seeds[key]), key);
 }
 
 function configToForm() {
@@ -530,6 +585,8 @@ function configToForm() {
   if (els.focusEnd) els.focusEnd.value = displayRange.endLevel;
   if (els.showGrowth) els.showGrowth.checked = !!state.chartVisibility.growth;
   if (els.showFinal) els.showFinal.checked = !!state.chartVisibility.final;
+  if (els.showTheoreticalBuff) els.showTheoreticalBuff.checked = !!state.chartVisibility.theoreticalBuff;
+  if (els.showCycleLine) els.showCycleLine.checked = !!state.cycleVisibility.cycle;
   syncDifficultyPresentationControls();
   refreshDifficultyPresentationCopy();
   syncLegendState();
@@ -602,24 +659,31 @@ function buildCycleValueInputs() {
 }
 
 function buildBuffInputs() {
+  ensureSegmentedBuffModel(state.config, state.currentKey);
   els.buffGrid.innerHTML = '';
-  for (let i = 0; i < 6; i += 1) {
-    const wrap = document.createElement('div');
-    wrap.className = 'buff-item';
-    wrap.innerHTML = `
-      <h2>Buff ${i}</h2>
-      <label>难度系数<input data-kind="decay" data-index="${i}" type="number" step="0.01" value="${state.config.buffModel.decay[i] ?? 1}"></label>
-    `;
-    wrap.querySelectorAll('input').forEach((input) => {
+  const header = document.createElement('div');
+  header.className = 'buff-matrix-row buff-matrix-head';
+  header.innerHTML = '<span>生效关卡</span>' + Array.from({ length: 6 }, (_, idx) => `<span>Buff${idx}</span>`).join('');
+  els.buffGrid.appendChild(header);
+
+  [
+    ['decayBefore300', '1–300关'],
+    ['decayAfter300', '301关起'],
+  ].forEach(([key, label]) => {
+    const row = document.createElement('div');
+    row.className = 'buff-matrix-row';
+    row.innerHTML = `<strong>${label}</strong>` + state.config.buffModel[key].map((value, idx) => `
+      <label><span>Buff ${idx}</span><input data-kind="${key}" data-index="${idx}" aria-label="${label} Buff ${idx} 难度系数" type="number" min="0" step="0.001" value="${value}"></label>
+    `).join('');
+    row.querySelectorAll('input').forEach((input) => {
       input.addEventListener('input', () => {
-        const index = Number(input.dataset.index);
-        const kind = input.dataset.kind;
-        state.config.buffModel[kind === 'weight' ? 'weights' : 'decay'][index] = num(input.value, 0);
+        state.config.buffModel[input.dataset.kind][Number(input.dataset.index)] = num(input.value, 0);
+        state.config.buffModel.decay = state.config.buffModel.decayAfter300.slice();
         recompute();
       });
     });
-    els.buffGrid.appendChild(wrap);
-  }
+    els.buffGrid.appendChild(row);
+  });
 }
 
 function buildOverrideTable() {
@@ -688,6 +752,7 @@ function renderFocusTable() {
       <td>${row.cycleValue.toFixed(2)}</td>
       <td>${row.adjusted.toFixed(2)}</td>
       <td>${row.finalDifficulty.toFixed(1)}</td>
+      <td>${row.theoreticalBuffDifficulty.toFixed(1)}</td>
       <td>${row.avg10.toFixed(2)}</td>
       <td>${row.avg20.toFixed(2)}</td>
       <td>${row.avg50.toFixed(2)}</td>
@@ -962,9 +1027,32 @@ function renderChart() {
   const finalLabel = getDifficultyPresentationLabel(getDifficultyPresentation(state.config).mode);
   const seriesEntries = [
     { key: 'final', name: finalLabel, data: rows.map((r) => r.finalDifficulty), color: '#2f8f72', visible: state.chartVisibility.final, lineWidth: 2.8, decimals: 1 },
+    { key: 'theoreticalBuff', name: '关卡理论有buff难度', data: rows.map((r) => r.theoreticalBuffDifficulty), color: '#d26b36', visible: state.chartVisibility.theoreticalBuff, lineWidth: 2.8, decimals: 1 },
     { key: 'growth', name: '基础增长值', data: rows.map((r) => r.formulaGrowth), color: '#d7a300', visible: state.chartVisibility.growth, lineWidth: 2.2 },
   ];
   drawLines(els.curveCanvas, seriesEntries, { levelIds: rows.map((r) => r.levelId) });
+}
+
+function renderCycleChart() {
+  if (!els.cycleCanvas) return;
+  const length = Math.max(1, Math.round(num(state.config.cycle.length, 50)));
+  const values = (state.config.cycle.values || []).slice(0, length).map((value) => num(value, 1));
+  drawLines(els.cycleCanvas, [
+    { name: '周期难度', data: values, color: '#d26b36', lineWidth: 2.8, visible: state.cycleVisibility.cycle, decimals: 2 },
+  ], { levelIds: values.map((_, idx) => idx + 1), tickLevelStep: 5, padding: { top: 20, right: 24, bottom: 42, left: 40 } });
+}
+
+function renderTheoreticalBuffTrendChart() {
+  if (!els.theoreticalBuffTrendCanvas) return;
+  const rows = focusRowsData();
+  const visibility = state.theoreticalBuffTrendVisibility;
+  drawLines(els.theoreticalBuffTrendCanvas, [
+    { name: '关卡理论有buff难度', data: rows.map((r) => r.theoreticalBuffDifficulty), color: '#d26b36', lineWidth: 2.8, visible: visibility.difficulty, decimals: 1 },
+    { name: '前10关', data: rows.map((r) => r.theoreticalBuffAvg10), color: '#cf4f67', lineWidth: 2, visible: visibility.avg10, decimals: 2 },
+    { name: '前20关', data: rows.map((r) => r.theoreticalBuffAvg20), color: '#1769aa', lineWidth: 2, visible: visibility.avg20, decimals: 2 },
+    { name: '前50关', data: rows.map((r) => r.theoreticalBuffAvg50), color: '#2f8f72', lineWidth: 2, visible: visibility.avg50, decimals: 2 },
+    { name: '前100关', data: rows.map((r) => r.theoreticalBuffAvg100), color: '#8a63d2', lineWidth: 2, visible: visibility.avg100, decimals: 2 },
+  ], { levelIds: rows.map((r) => r.levelId) });
 }
 
 function renderBuffDistributionChart() {
@@ -997,7 +1085,7 @@ function renderBuffExpectationChart() {
 }
 
 function syncLegendState() {
-  ['showGrowth', 'showFinal', 'showTrendGrowth', 'showAvg10', 'showAvg20', 'showAvg50', 'showAvg100', 'showBuffExpected10', 'showBuffExpected20', 'showBuffExpected50', 'showBuffExpected100', 'showBuff1', 'showBuff2', 'showBuff3', 'showBuff4', 'showBuff5'].forEach((id) => {
+  ['showGrowth', 'showFinal', 'showTheoreticalBuff', 'showCycleLine', 'showTrendGrowth', 'showAvg10', 'showAvg20', 'showAvg50', 'showAvg100', 'showBuffExpected10', 'showBuffExpected20', 'showBuffExpected50', 'showBuffExpected100', 'showTheoreticalBuffDifficulty', 'showTheoreticalBuffAvg10', 'showTheoreticalBuffAvg20', 'showTheoreticalBuffAvg50', 'showTheoreticalBuffAvg100', 'showBuff1', 'showBuff2', 'showBuff3', 'showBuff4', 'showBuff5'].forEach((id) => {
     const input = els[id];
     if (!input) return;
     input.closest('.legend-toggle')?.classList.toggle('off', !input.checked);
@@ -1023,10 +1111,12 @@ function recompute() {
     refreshDifficultyPresentationCopy();
     renderHero();
     renderFocusTable();
+    renderCycleChart();
     renderChart();
     renderBuffDistributionChart();
     renderTrendChart();
     renderBuffExpectationChart();
+    renderTheoreticalBuffTrendChart();
     syncLegendState();
     syncSpecialRuleControls();
     syncDifficultyPresentationControls();
@@ -1047,13 +1137,14 @@ function exportFocusTable() {
   const rows = focusRowsData();
   const range = getFocusRange();
   const finalLabel = getDifficultyPresentationLabel(getDifficultyPresentation(state.config).mode);
-  const header = ['关卡', '基础增长值', '周期修正', '特殊关修正', finalLabel, '前10关', '前20关', '前50关', '前100关', '首刷0buff率', '首刷1级buff率', '首刷2级buff率', '首刷3级buff率', '首刷4级buff率', '首刷5级buff率'];
+  const header = ['关卡', '基础增长值', '周期修正', '特殊关修正', finalLabel, '关卡理论有buff难度', '前10关', '前20关', '前50关', '前100关', '首刷0buff率', '首刷1级buff率', '首刷2级buff率', '首刷3级buff率', '首刷4级buff率', '首刷5级buff率'];
   const lines = [header.join(',')].concat(rows.map((row) => [
     row.levelId,
     row.growth.toFixed(2),
     row.cycleValue.toFixed(2),
     row.adjusted.toFixed(2),
     row.finalDifficulty.toFixed(1),
+    row.theoreticalBuffDifficulty.toFixed(1),
     row.avg10.toFixed(2),
     row.avg20.toFixed(2),
     row.avg50.toFixed(2),
@@ -1127,6 +1218,7 @@ function bindBaseInputs() {
   [
     ['showGrowth', 'growth'],
     ['showFinal', 'final'],
+    ['showTheoreticalBuff', 'theoreticalBuff'],
   ].forEach(([id, key]) => {
     if (!els[id]) return;
     els[id].addEventListener('change', () => {
@@ -1134,6 +1226,12 @@ function bindBaseInputs() {
       syncLegendState();
       renderChart();
     });
+  });
+
+  if (els.showCycleLine) els.showCycleLine.addEventListener('change', () => {
+    state.cycleVisibility.cycle = els.showCycleLine.checked;
+    syncLegendState();
+    renderCycleChart();
   });
 
   [
@@ -1177,6 +1275,21 @@ function bindBaseInputs() {
       state.buffExpectationVisibility[key] = els[id].checked;
       syncLegendState();
       renderBuffExpectationChart();
+    });
+  });
+
+  [
+    ['showTheoreticalBuffDifficulty', 'difficulty'],
+    ['showTheoreticalBuffAvg10', 'avg10'],
+    ['showTheoreticalBuffAvg20', 'avg20'],
+    ['showTheoreticalBuffAvg50', 'avg50'],
+    ['showTheoreticalBuffAvg100', 'avg100'],
+  ].forEach(([id, key]) => {
+    if (!els[id]) return;
+    els[id].addEventListener('change', () => {
+      state.theoreticalBuffTrendVisibility[key] = els[id].checked;
+      syncLegendState();
+      renderTheoreticalBuffTrendChart();
     });
   });
 
@@ -1243,7 +1356,9 @@ async function init() {
     },
     buffModel: {
       weights: referenceSeed.modelSeed?.buffWeights || defaultSeed.buffModel.weights,
-      decay: [1, 0.6302319468, 0.4392866662, 0.3316306420, 0.1993753807, 0.0771788931],
+      decay: [...BUFF_DECAY_CURRENT],
+      decayBefore300: [...BUFF_DECAY_CURRENT],
+      decayAfter300: [...BUFF_DECAY_CURRENT],
       fullBuffBaseShare: 0.1,
     },
     difficultyPresentation: getDefaultDifficultyPresentation('PopH5'),
@@ -1277,6 +1392,9 @@ async function init() {
     buffStartLevel: 33,
   };
   state.seeds.default.manualOverrides = [];
+  state.seeds.default.buffModel.decayBefore300 = [...SH01_BUFF_DECAY_FIRST_300];
+  state.seeds.default.buffModel.decayAfter300 = [...BUFF_DECAY_CURRENT];
+  state.seeds.default.buffModel.decay = [...BUFF_DECAY_CURRENT];
   state.seeds.default.difficultyPresentation = getDefaultDifficultyPresentation('SH01');
   migrateSavedSh01Cycle();
   state.config = cloneConfigForKey(state.currentKey);
@@ -1284,10 +1402,12 @@ async function init() {
   els.dataSource.value = state.currentKey;
   configToForm();
   bindBaseInputs();
+  setupChartTooltip(els.cycleCanvas);
   setupChartTooltip(els.curveCanvas);
   setupChartTooltip(els.buffDistributionCanvas);
   setupChartTooltip(els.trendCanvas);
   setupChartTooltip(els.buffExpectationCanvas);
+  setupChartTooltip(els.theoreticalBuffTrendCanvas);
   window.addEventListener('scroll', hideChartTooltip, true);
   window.addEventListener('blur', hideChartTooltip);
   window.addEventListener('resize', renderBuffDistributionChart);
