@@ -91,7 +91,7 @@
         <h2>特殊关</h2>
         <div class="grid two">
           <label>引导关难度<input id="guideDifficulty" type="number" min="0.5" max="5" step="0.1" /></label>
-          <label>金币关难度<input id="coinDifficulty" type="number" min="0.5" max="5" step="0.1" /></label>
+          <label><span id="coinDifficultyLabelText">金币关难度</span><input id="coinDifficulty" type="number" min="0.5" max="5" step="0.1" /></label>
           <label>50关周期第 x 关<input id="tailCapPositions" type="text" inputmode="numeric" placeholder="1, 11" /></label>
           <label>封顶难度 y<input id="tailCapMax" type="number" min="0.5" max="10" step="0.1" /></label>
         </div>
@@ -116,7 +116,7 @@
         <ol class="rule-notes">
           <li>难度计算结果小于 1 时，按 1 处理。</li>
           <li>最终难度统一只保留到小数点后 1 位。</li>
-          <li>仅 SH01：整百关（100、200、300……）难度固定为 1。</li>
+          <li>仅 SH01：整百关（100、200、300……）使用“整百关难度”设置值，默认为 1。</li>
           <li>特别取整规则：</li>
         </ol>
         <div class="rounding-grid">

@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260724-01';
+const DATA_VERSION = '20260727-02';
 
 const state = {
   seeds: {},
@@ -17,6 +17,18 @@ const els = {};
 const SAVED_CONFIG_PREFIX = 'difficultyCurve.savedConfig.';
 const SH01_CYCLE_VERSION = '20260721-01';
 const SH01_CYCLE_VERSION_KEY = 'difficultyCurve.dataVersion.SH01.cycle';
+const SH01_GROWTH_VERSION = '20260727-01';
+const SH01_GROWTH_VERSION_KEY = 'difficultyCurve.dataVersion.SH01.growth';
+const SH01_GROWTH_FORMULA_NUMERATOR = '6.372*ln(x+700) - 40.85';
+const SH01_MANUAL_OVERRIDES_VERSION = '20260727-01';
+const SH01_MANUAL_OVERRIDES_VERSION_KEY = 'difficultyCurve.dataVersion.SH01.manualOverrides';
+const SH01_FIRST_50_DIFFICULTIES = [
+  1, 1, 1, 1, 1.1, 1, 1, 1, 1.1, 1,
+  1, 1.1, 1, 1, 1.5, 1, 1.1, 1, 1.8, 1,
+  1, 1, 1.2, 1, 1.5, 1, 1.2, 1, 2, 1,
+  1, 1.2, 1, 1, 1.1, 1, 1, 1, 2.5, 1,
+  1, 1, 1.5, 1, 2, 1, 1.5, 1, 3.5, 1,
+];
 const BUFF_DECAY_CURRENT = [1, 0.6302319468, 0.4392866662, 0.3316306420, 0.1993753807, 0.0771788931];
 const SH01_BUFF_DECAY_FIRST_300 = [1, 0.677, 0.373, 0.152, 0.127, 0.038];
 
@@ -208,6 +220,12 @@ function refreshDifficultyPresentationCopy() {
   if (els.finalDifficultyLegendText) els.finalDifficultyLegendText.textContent = summary.label;
 }
 
+function refreshSpecialRuleCopy() {
+  if (!els.coinDifficultyLabelText) return;
+  const isSh01 = String(state.config?.meta?.projectName || '').toUpperCase() === 'SH01';
+  els.coinDifficultyLabelText.textContent = isSh01 ? '整百关难度' : '金币关难度';
+}
+
 function getCycleFactor(levelId, cycle) {
   const length = Math.max(1, Math.round(cycle.length));
   const values = cycle.values || [];
@@ -336,7 +354,7 @@ function computeModel(config) {
     }
     if (coinSet.has(levelId)) adjusted = num(config.specialRules.coinDifficulty, 1);
     if (overrideMap.has(levelId)) adjusted = overrideMap.get(levelId);
-    if (isSh01 && levelId % 100 === 0) adjusted = 1;
+    if (isSh01 && levelId % 100 === 0) adjusted = num(config.specialRules.coinDifficulty, 1);
 
     const decay = buffDecayAt(config.buffModel, levelId);
     const buffed = Math.max(0.5, weights.reduce((sum, weight, idx) => {
@@ -464,7 +482,7 @@ function initEls() {
   [
     'dataSource','resetBtn','saveBtn','exportBtn','levelCount','growthFormulaNumerator','growthFormulaDenominator','growthCap','cycleLength','cycleValues',
     'difficultyPresentationMode','noItemCoeff','comprehensiveCoeff',
-    'guideDifficulty','coinDifficulty','tailCapPositions','tailCapMax','tailCapEnabled','streakEnabled','streakExtraDefault','guideLevels',
+    'guideDifficulty','coinDifficulty','coinDifficultyLabelText','tailCapPositions','tailCapMax','tailCapEnabled','streakEnabled','streakExtraDefault','guideLevels',
     'coinLevels','buffStartLevel','buffGrid','halfStepThreshold','integerThreshold','projectTitle','heroMode','heroStats',
     'focusStart','focusEnd','focusTable','overrideTable','curveCanvas','cycleCanvas','trendCanvas','buffExpectationCanvas','theoreticalBuffTrendCanvas','protocolWarning',
     'runtimeWarning','runtimeWarningText','showGrowth','showFinal','showTheoreticalBuff','showCycleLine','showTrendGrowth','showAvg10','showAvg20','showAvg50','showAvg100',
@@ -531,6 +549,48 @@ function migrateSavedSh01Cycle() {
   }
 }
 
+function migrateSavedSh01Growth() {
+  try {
+    if (localStorage.getItem(SH01_GROWTH_VERSION_KEY) === SH01_GROWTH_VERSION) return;
+    const saved = loadSavedConfig('default');
+    if (saved?.growth) {
+      const parts = splitGrowthFormula(saved.growth.formula);
+      const numerator = String(saved.growth.formulaNumerator ?? parts.numerator).replace(/\s+/g, '');
+      if (numerator === '4*ln(x+180)-19.79') {
+        const denominator = String(saved.growth.formulaDenominator ?? parts.denominator ?? '2.1');
+        saved.growth.formulaNumerator = SH01_GROWTH_FORMULA_NUMERATOR;
+        saved.growth.formulaDenominator = denominator;
+        saved.growth.formula = '(' + SH01_GROWTH_FORMULA_NUMERATOR + ') / ' + denominator;
+        localStorage.setItem(savedConfigKey('default'), JSON.stringify(saved));
+      }
+    }
+    localStorage.setItem(SH01_GROWTH_VERSION_KEY, SH01_GROWTH_VERSION);
+  } catch (error) {
+    console.warn('迁移 SH01 基础增长公式失败', error);
+  }
+}
+
+function buildSh01First50Overrides() {
+  return SH01_FIRST_50_DIFFICULTIES.map((difficulty, index) => ({
+    levelId: index + 1,
+    difficulty,
+  }));
+}
+
+function migrateSavedSh01ManualOverrides() {
+  try {
+    if (localStorage.getItem(SH01_MANUAL_OVERRIDES_VERSION_KEY) === SH01_MANUAL_OVERRIDES_VERSION) return;
+    const saved = loadSavedConfig('default');
+    if (saved && (!Array.isArray(saved.manualOverrides) || saved.manualOverrides.length === 0)) {
+      saved.manualOverrides = buildSh01First50Overrides();
+      localStorage.setItem(savedConfigKey('default'), JSON.stringify(saved));
+    }
+    localStorage.setItem(SH01_MANUAL_OVERRIDES_VERSION_KEY, SH01_MANUAL_OVERRIDES_VERSION);
+  } catch (error) {
+    console.warn('迁移 SH01 前50关人工微调失败', error);
+  }
+}
+
 function normalizeBuffDecay(values, fallback = BUFF_DECAY_CURRENT) {
   return Array.from({ length: 6 }, (_, idx) => num(values?.[idx], fallback[idx] ?? 1));
 }
@@ -591,6 +651,7 @@ function configToForm() {
   if (els.showCycleLine) els.showCycleLine.checked = !!state.cycleVisibility.cycle;
   syncDifficultyPresentationControls();
   refreshDifficultyPresentationCopy();
+  refreshSpecialRuleCopy();
   syncLegendState();
   buildCycleValueInputs();
   buildBuffInputs();
@@ -1374,8 +1435,8 @@ async function init() {
   state.seeds.default.cycle = deepClone(defaultSeed.cycle);
   state.seeds.default.levelCount = 3000;
   state.seeds.default.growth = {
-    formula: '(4*ln(x+180) - 19.79) / 2.1',
-    formulaNumerator: '4*ln(x+180) - 19.79',
+    formula: '(' + SH01_GROWTH_FORMULA_NUMERATOR + ') / 2.1',
+    formulaNumerator: SH01_GROWTH_FORMULA_NUMERATOR,
     formulaDenominator: '2.1',
     cap: 11,
   };
@@ -1393,12 +1454,14 @@ async function init() {
     streakExtraDefault: 1.1,
     buffStartLevel: 33,
   };
-  state.seeds.default.manualOverrides = [];
+  state.seeds.default.manualOverrides = deepClone(defaultSeed.manualOverrides || buildSh01First50Overrides());
   state.seeds.default.buffModel.decayBefore300 = [...SH01_BUFF_DECAY_FIRST_300];
   state.seeds.default.buffModel.decayAfter300 = [...BUFF_DECAY_CURRENT];
   state.seeds.default.buffModel.decay = [...BUFF_DECAY_CURRENT];
   state.seeds.default.difficultyPresentation = getDefaultDifficultyPresentation('SH01');
   migrateSavedSh01Cycle();
+  migrateSavedSh01Growth();
+  migrateSavedSh01ManualOverrides();
   state.config = cloneConfigForKey(state.currentKey);
   updateProtocolWarning();
   els.dataSource.value = state.currentKey;

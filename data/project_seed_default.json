@@ -5,7 +5,10 @@
              },
     "levelCount":  3000,
     "growth":  {
-                   "formula":  "((1.08 * ln(x + 78)) - 3.8) / 2"
+                   "formula":  "(6.372*ln(x+700) - 40.85) / 2.1",
+                   "formulaNumerator":  "6.372*ln(x+700) - 40.85",
+                   "formulaDenominator":  "2.1",
+                   "cap":  11
                },
     "rounding":  {
                      "halfStepThreshold":  1.9,
@@ -203,7 +206,7 @@
                             },
                             {
                                 "levelId":  7,
-                                "difficulty":  1.1
+                                "difficulty":  1
                             },
                             {
                                 "levelId":  8,
@@ -223,7 +226,7 @@
                             },
                             {
                                 "levelId":  12,
-                                "difficulty":  1.4
+                                "difficulty":  1.1
                             },
                             {
                                 "levelId":  13,
@@ -243,7 +246,7 @@
                             },
                             {
                                 "levelId":  17,
-                                "difficulty":  1.3
+                                "difficulty":  1.1
                             },
                             {
                                 "levelId":  18,
@@ -259,15 +262,15 @@
                             },
                             {
                                 "levelId":  21,
-                                "difficulty":  1.1
+                                "difficulty":  1
                             },
                             {
                                 "levelId":  22,
-                                "difficulty":  1.2
+                                "difficulty":  1
                             },
                             {
                                 "levelId":  23,
-                                "difficulty":  1.1
+                                "difficulty":  1.2
                             },
                             {
                                 "levelId":  24,
@@ -283,7 +286,7 @@
                             },
                             {
                                 "levelId":  27,
-                                "difficulty":  1.3
+                                "difficulty":  1.2
                             },
                             {
                                 "levelId":  28,
@@ -299,7 +302,7 @@
                             },
                             {
                                 "levelId":  31,
-                                "difficulty":  1.1
+                                "difficulty":  1
                             },
                             {
                                 "levelId":  32,
@@ -307,15 +310,15 @@
                             },
                             {
                                 "levelId":  33,
-                                "difficulty":  1.1
+                                "difficulty":  1
                             },
                             {
                                 "levelId":  34,
-                                "difficulty":  1.4
+                                "difficulty":  1
                             },
                             {
                                 "levelId":  35,
-                                "difficulty":  1.7
+                                "difficulty":  1.1
                             },
                             {
                                 "levelId":  36,
@@ -323,11 +326,11 @@
                             },
                             {
                                 "levelId":  37,
-                                "difficulty":  1.655658373
+                                "difficulty":  1
                             },
                             {
                                 "levelId":  38,
-                                "difficulty":  1.000408055
+                                "difficulty":  1
                             },
                             {
                                 "levelId":  39,
@@ -335,7 +338,7 @@
                             },
                             {
                                 "levelId":  40,
-                                "difficulty":  1.014254546
+                                "difficulty":  1
                             },
                             {
                                 "levelId":  41,
@@ -343,15 +346,15 @@
                             },
                             {
                                 "levelId":  42,
-                                "difficulty":  1.1
+                                "difficulty":  1
                             },
                             {
                                 "levelId":  43,
-                                "difficulty":  1.379453789
+                                "difficulty":  1.5
                             },
                             {
                                 "levelId":  44,
-                                "difficulty":  1.73542841
+                                "difficulty":  1
                             },
                             {
                                 "levelId":  45,
@@ -359,15 +362,15 @@
                             },
                             {
                                 "levelId":  46,
-                                "difficulty":  1.1
+                                "difficulty":  1
                             },
                             {
                                 "levelId":  47,
-                                "difficulty":  1.768223545
+                                "difficulty":  1.5
                             },
                             {
                                 "levelId":  48,
-                                "difficulty":  1.1
+                                "difficulty":  1
                             },
                             {
                                 "levelId":  49,
