@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260727-02';
+const DATA_VERSION = '20260727-03';
 
 const state = {
   seeds: {},
@@ -20,7 +20,7 @@ const SH01_CYCLE_VERSION_KEY = 'difficultyCurve.dataVersion.SH01.cycle';
 const SH01_GROWTH_VERSION = '20260727-01';
 const SH01_GROWTH_VERSION_KEY = 'difficultyCurve.dataVersion.SH01.growth';
 const SH01_GROWTH_FORMULA_NUMERATOR = '6.372*ln(x+700) - 40.85';
-const SH01_MANUAL_OVERRIDES_VERSION = '20260727-01';
+const SH01_MANUAL_OVERRIDES_VERSION = '20260727-02';
 const SH01_MANUAL_OVERRIDES_VERSION_KEY = 'difficultyCurve.dataVersion.SH01.manualOverrides';
 const SH01_FIRST_50_DIFFICULTIES = [
   1, 1, 1, 1, 1.1, 1, 1, 1, 1.1, 1,
@@ -28,6 +28,13 @@ const SH01_FIRST_50_DIFFICULTIES = [
   1, 1, 1.2, 1, 1.5, 1, 1.2, 1, 2, 1,
   1, 1.2, 1, 1, 1.1, 1, 1, 1, 2.5, 1,
   1, 1, 1.5, 1, 2, 1, 1.5, 1, 3.5, 1,
+];
+const SH01_PREVIOUS_FIRST_50_DIFFICULTIES = [
+  1, 1, 1, 1, 1.1, 1, 1.1, 1, 1.1, 1,
+  1, 1.4, 1, 1, 1.5, 1, 1.3, 1, 1.8, 1,
+  1.1, 1.2, 1.1, 1, 1.5, 1, 1.3, 1, 2, 1,
+  1.1, 1.2, 1.1, 1.4, 1.7, 1, 1.655658373, 1.000408055, 2.5, 1.014254546,
+  1, 1.1, 1.379453789, 1.73542841, 2, 1.1, 1.768223545, 1.1, 3.5, 1,
 ];
 const BUFF_DECAY_CURRENT = [1, 0.6302319468, 0.4392866662, 0.3316306420, 0.1993753807, 0.0771788931];
 const SH01_BUFF_DECAY_FIRST_300 = [1, 0.677, 0.373, 0.152, 0.127, 0.038];
@@ -577,11 +584,27 @@ function buildSh01First50Overrides() {
   }));
 }
 
+function matchesDifficultySequence(overrides, difficulties) {
+  if (!Array.isArray(overrides) || overrides.length !== difficulties.length) return false;
+  return difficulties.every((difficulty, index) => {
+    const entry = overrides[index];
+    const entryDifficulty = entry?.difficulty ?? entry?.targetDifficulty;
+    return Math.round(num(entry?.levelId, 0)) === index + 1
+      && num(entryDifficulty, NaN) === difficulty;
+  });
+}
+
 function migrateSavedSh01ManualOverrides() {
   try {
     if (localStorage.getItem(SH01_MANUAL_OVERRIDES_VERSION_KEY) === SH01_MANUAL_OVERRIDES_VERSION) return;
     const saved = loadSavedConfig('default');
-    if (saved && (!Array.isArray(saved.manualOverrides) || saved.manualOverrides.length === 0)) {
+    const overrides = saved?.manualOverrides;
+    const shouldUseNewDefaults = saved && (
+      !Array.isArray(overrides)
+      || overrides.length === 0
+      || matchesDifficultySequence(overrides, SH01_PREVIOUS_FIRST_50_DIFFICULTIES)
+    );
+    if (shouldUseNewDefaults) {
       saved.manualOverrides = buildSh01First50Overrides();
       localStorage.setItem(savedConfigKey('default'), JSON.stringify(saved));
     }
