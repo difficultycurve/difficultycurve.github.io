@@ -294,10 +294,11 @@ function calculateTheoreticalBuffDifficulty(difficulty, decay, zeroBuffRate, fir
 
 function computeModel(config) {
   const levelCount = Math.max(1, Math.round(num(config.levelCount, 300)));
+  const isSh01 = String(config.meta?.projectName || '').toUpperCase() === 'SH01';
   const guideSet = levelSet(config.specialRules.guideLevels || []);
   const coinSet = levelSet(config.specialRules.coinLevels || []);
   const overrideMap = buildManualOverrideMap(config.manualOverrides || []);
-  ensureSegmentedBuffModel(config, String(config.meta?.projectName || '').toUpperCase() === 'SH01' ? 'default' : 'reference');
+  ensureSegmentedBuffModel(config, isSh01 ? 'default' : 'reference');
   const weights = normalizeWeights(config.buffModel.weights || []);
   const growthCap = config.growth?.cap;
 
@@ -335,6 +336,7 @@ function computeModel(config) {
     }
     if (coinSet.has(levelId)) adjusted = num(config.specialRules.coinDifficulty, 1);
     if (overrideMap.has(levelId)) adjusted = overrideMap.get(levelId);
+    if (isSh01 && levelId % 100 === 0) adjusted = 1;
 
     const decay = buffDecayAt(config.buffModel, levelId);
     const buffed = Math.max(0.5, weights.reduce((sum, weight, idx) => {
