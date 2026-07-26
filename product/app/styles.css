@@ -445,6 +445,12 @@ button.secondary:hover { background: #d4e0eb; }
   overflow-x: auto;
 }
 
+.buff-transition-note {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .buff-matrix-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -1,4 +1,4 @@
-const DATA_VERSION = '20260727-03';
+const DATA_VERSION = '20260727-04';
 
 const state = {
   seeds: {},
@@ -38,6 +38,8 @@ const SH01_PREVIOUS_FIRST_50_DIFFICULTIES = [
 ];
 const BUFF_DECAY_CURRENT = [1, 0.6302319468, 0.4392866662, 0.3316306420, 0.1993753807, 0.0771788931];
 const SH01_BUFF_DECAY_FIRST_300 = [1, 0.677, 0.373, 0.152, 0.127, 0.038];
+const SH01_BUFF_TRANSITION_START_LEVEL = 250;
+const SH01_BUFF_TRANSITION_END_LEVEL = 500;
 
 async function loadJson(path) {
   const separator = path.includes('?') ? '&' : '?';
@@ -363,7 +365,7 @@ function computeModel(config) {
     if (overrideMap.has(levelId)) adjusted = overrideMap.get(levelId);
     if (isSh01 && levelId % 100 === 0) adjusted = num(config.specialRules.coinDifficulty, 1);
 
-    const decay = buffDecayAt(config.buffModel, levelId);
+    const decay = buffDecayAt(config.buffModel, levelId, isSh01);
     const buffed = Math.max(0.5, weights.reduce((sum, weight, idx) => {
       const coeff = decay[idx] ?? 1;
       return sum + (((adjusted - 1) * coeff) + 1) * weight;
@@ -628,9 +630,17 @@ function ensureSegmentedBuffModel(config, key) {
   return config;
 }
 
-function buffDecayAt(buffModel, levelId) {
-  const source = levelId <= 300 ? buffModel.decayBefore300 : buffModel.decayAfter300;
-  return normalizeBuffDecay(source, buffModel.decay || BUFF_DECAY_CURRENT);
+function buffDecayAt(buffModel, levelId, useSh01Transition = false) {
+  const before = normalizeBuffDecay(buffModel.decayBefore300, buffModel.decay || BUFF_DECAY_CURRENT);
+  const after = normalizeBuffDecay(buffModel.decayAfter300, buffModel.decay || BUFF_DECAY_CURRENT);
+  if (!useSh01Transition) return levelId <= 300 ? before : after;
+  if (levelId <= SH01_BUFF_TRANSITION_START_LEVEL) return before;
+  if (levelId >= SH01_BUFF_TRANSITION_END_LEVEL) return after;
+
+  const linearProgress = (levelId - SH01_BUFF_TRANSITION_START_LEVEL)
+    / (SH01_BUFF_TRANSITION_END_LEVEL - SH01_BUFF_TRANSITION_START_LEVEL);
+  const smoothProgress = linearProgress * linearProgress * (3 - (2 * linearProgress));
+  return before.map((value, index) => value + ((after[index] - value) * smoothProgress));
 }
 
 function cloneConfigForKey(key) {
@@ -752,9 +762,17 @@ function buildBuffInputs() {
   header.innerHTML = '<span>生效关卡</span>' + Array.from({ length: 6 }, (_, idx) => `<span>Buff${idx}</span>`).join('');
   els.buffGrid.appendChild(header);
 
+  const isSh01 = String(state.config.meta?.projectName || '').toUpperCase() === 'SH01';
+  if (isSh01) {
+    const note = document.createElement('p');
+    note.className = 'muted buff-transition-note';
+    note.textContent = '250–500关使用 Smoothstep 平滑过渡';
+    els.buffGrid.appendChild(note);
+  }
+
   [
-    ['decayBefore300', '1–300关'],
-    ['decayAfter300', '301关起'],
+    ['decayBefore300', isSh01 ? '250关及以前' : '1–300关'],
+    ['decayAfter300', isSh01 ? '500关及以后' : '301关起'],
   ].forEach(([key, label]) => {
     const row = document.createElement('div');
     row.className = 'buff-matrix-row';
